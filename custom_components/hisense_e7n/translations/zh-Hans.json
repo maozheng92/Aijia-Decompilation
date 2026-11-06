@@ -1,0 +1,91 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "海信 E7N Pro",
+        "description": "电视需已开机且与 Home Assistant 在同一局域网。默认端口 36669（VIDAA 机内 MQTT / TLS）。",
+        "data": {
+          "host": "电视 IP",
+          "port": "MQTT 端口",
+          "mac": "电视 MAC（网络唤醒）",
+          "name": "名称",
+          "auth_mode": "认证模式",
+          "client_cert": "客户端证书 PEM（可选）",
+          "client_key": "客户端私钥 PEM（可选）"
+        },
+        "data_description": {
+          "host": "给 E7N Pro 做 DHCP 地址预留，避免 IP 变化。",
+          "mac": "深度待机后开机需要 Wake-on-LAN。",
+          "auth_mode": "auto 会先试新固件动态凭证，再回退旧固件静态账号。",
+          "client_cert": "留空则使用生成的占位证书。若 MQTT 返回 rc=5，请按文档放入爱家/VIDAA 客户端证书。"
+        }
+      },
+      "pin": {
+        "title": "与电视配对",
+        "description": "电视弹出 4 位 PIN 时填入。若没有弹窗，说明此客户端已授权，PIN 留空直接提交即可。\n\n{hint}",
+        "data": {
+          "pin": "PIN"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "无法连接电视 36669 端口的 MQTT。请确认电视已开机、IP 正确，并已打开手机遥控/网络控制。",
+      "invalid_pin": "PIN 未被接受。请在屏幕倒计时结束前重试。"
+    },
+    "abort": {
+      "already_configured": "这台电视已经添加过了。",
+      "cannot_connect": "无法连接电视。"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "海信 E7N Pro 选项",
+        "data": {
+          "host": "电视 IP",
+          "port": "MQTT 端口",
+          "mac": "电视 MAC（网络唤醒）",
+          "name": "名称"
+        }
+      }
+    }
+  },
+  "entity": {
+    "media_player": {
+      "tv": {
+        "name": "电视"
+      }
+    },
+    "remote": {
+      "remote": {
+        "name": "遥控器"
+      }
+    }
+  },
+  "services": {
+    "send_key": {
+      "name": "发送遥控键",
+      "description": "向电视发送 VIDAA / 爱家 KEY_* 按键。",
+      "fields": {
+        "key": {
+          "name": "按键",
+          "description": "线路名（KEY_HOME）或别名（home、ok、mute）。"
+        }
+      }
+    },
+    "launch_app": {
+      "name": "打开应用",
+      "description": "按名称启动电视上的应用。",
+      "fields": {
+        "name": {
+          "name": "应用名",
+          "description": "例如 Netflix。"
+        },
+        "url": {
+          "name": "应用 URL / id",
+          "description": "可选，例如 netflix。"
+        }
+      }
+    }
+  }
+}

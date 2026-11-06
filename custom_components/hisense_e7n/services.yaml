@@ -1,0 +1,36 @@
+send_key:
+  name: Send remote key
+  description: Send a VIDAA / 爱家 KEY_* code to the TV.
+  target:
+    entity:
+      integration: hisense_e7n
+      domain: remote
+  fields:
+    key:
+      name: Key
+      description: Wire name (KEY_HOME) or alias (home, ok, mute).
+      required: true
+      example: KEY_HOME
+      selector:
+        text:
+
+launch_app:
+  name: Launch app
+  description: Launch an installed VIDAA app by name.
+  target:
+    entity:
+      integration: hisense_e7n
+      domain: media_player
+  fields:
+    name:
+      name: App name
+      required: true
+      example: Netflix
+      selector:
+        text:
+    url:
+      name: App URL / id
+      required: false
+      example: netflix
+      selector:
+        text:

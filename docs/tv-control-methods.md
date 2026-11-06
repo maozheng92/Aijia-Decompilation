@@ -223,14 +223,20 @@ sendVoiceToTV / pushTextToTv
 startDiscoverDlnaTv
 ```
 
-## 7. 想对接自己电视时该看哪一层
+## 7. E7N Pro 该用哪一层
+
+E7N Pro 是 VIDAA 机。Home Assistant 应直连电视 **MQTT `:36669`**（`sendkey` 的 `KEY_*` 与本文第 3 节完全一致），用动态凭证 + PIN 配对。实现见 `custom_components/hisense_e7n` 与 [e7n-pro-homeassistant.md](e7n-pro-homeassistant.md)。
+
+爱家云 `pushRemoter`、HiConnect、红外都不是 HA 的主路径：云要账号，HiConnect 是家电发现栈，红外依赖手机硬件。
+
+## 8. 想对接自己电视时该看哪一层
 
 1. **已登录爱家账号、电视已绑定**：云通道即可。按键走 `/mobilemsg/push/v5.3/remoter`，开关机/场景走 `/4.0/iot/devices/execute`，MQTT 配置走 `/2.0/mqtt/config`。请求需要账号 token 和 `deviceId`。
 2. **手机和电视同一局域网**：先 DLNA/HiConnect 发现，拿到 `ip`+`wifiId`+`ticket`，再调 `HiConnect.control` / `specialControl`。报文 AES，不能只靠明文 HTTP。
 3. **只要传统遥控**：看红外 Activity，与 IP 协议无关。
 4. **投屏**：走 Ju AIoT mirror / LiteAV / WebRTC，不是遥控键值。
 
-## 8. 分析边界
+## 9. 分析边界
 
 - Java 业务被百度加固，无法得到 `HiConnect.java` 的完整封装代码。
 - Dart 是 AOT，只能还原符号和字符串，不能还原完整函数体。

@@ -1,17 +1,28 @@
-# 海信爱家 APK 分析
+# 海信爱家 / E7N Pro
 
 仓库内 APK：`com.hisense.ms.fly2tv.apk`（海信爱家 7.0.8.12，Git LFS）。
 
-## 电视怎么控
+## E7N Pro 怎么控
 
-应用对已绑定电视同时走云和局域网：
+给 Home Assistant 用的是电视 **VIDAA 机内 MQTT（TCP 36669 / TLS）**，键值和爱家 App 的 `KEY_POWER`、`KEY_OK` 相同。不要走爱家云 token。
 
-1. **云端按键**：`pushRemoter` / `sendKeyByMqtt` → `https://mobile-aiot.hismarttv.com/mobilemsg/push/v5.3/remoter`，键值如 `KEY_POWER`、`KEY_OK`。
-2. **云端功能**：`powerOffTv` / `controlDevice` → `https://iot-aihome.hismarttv.com/4.0/iot/devices/execute`。
-3. **MQTT**：`getMqttConfig` → `https://mqtt-msg.hismarttv.com/2.0/mqtt/config`，再 `connectTVByMqtt`。
-4. **局域网**：DLNA 发现 + HiConnect（`HiConnect.control` / `specialControl`），UDP `229.x.x.x` 发现，TCP+AES 控设备。
-5. **其它**：语音 `sendVoiceToTV`、投屏（WebRTC/镜像）、红外 `IRControllerActivity`、移动电视云台。
+完整协议对照：[docs/tv-control-methods.md](docs/tv-control-methods.md)  
+E7N Pro 结论与安装：[docs/e7n-pro-homeassistant.md](docs/e7n-pro-homeassistant.md)
 
-完整类名、JNI、键值表见 [docs/tv-control-methods.md](docs/tv-control-methods.md)。
+## Home Assistant 集成
 
-业务主体在 Flutter AOT（`libapp.so`），Java 被百度加固，jadx 只能解出壳。
+目录：`custom_components/hisense_e7n`
+
+拷到 HA 的 `config/custom_components/` 后重启，在「添加集成」里搜 **Hisense E7N Pro**。电视需已开机；建议填写 MAC 以便 Wake-on-LAN。
+
+```text
+custom_components/hisense_e7n/   # 本仓库
+        ↓ 复制
+<ha-config>/custom_components/hisense_e7n/
+```
+
+协议自测（不需要 Home Assistant）：
+
+```bash
+python3 -m pytest tests
+```

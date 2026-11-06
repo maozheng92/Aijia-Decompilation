@@ -1,0 +1,65 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Hisense E7N Pro",
+        "description": "The TV must be on and reachable on the LAN. Default broker port is 36669 (VIDAA MQTT over TLS).",
+        "data": {
+          "host": "TV IP address",
+          "port": "MQTT port",
+          "mac": "TV MAC (Wake-on-LAN)",
+          "name": "Name",
+          "auth_mode": "Auth mode",
+          "client_cert": "Client certificate PEM (optional)",
+          "client_key": "Client private key PEM (optional)"
+        },
+        "data_description": {
+          "host": "IPv4 of the E7N Pro. Give it a DHCP reservation.",
+          "mac": "Needed to turn the TV on from deep standby.",
+          "auth_mode": "auto tries modern VIDAA credentials first, then legacy static login.",
+          "client_cert": "Leave empty to use a generated stand-in cert. If MQTT rc=5, extract the VIDAA/爱家 client cert (see docs)."
+        }
+      },
+      "pin": {
+        "title": "Pair with the TV",
+        "description": "If the TV shows a 4-digit PIN, enter it. If nothing appeared, the UUID is already authorized — leave the field empty and submit.\n\nHint: {hint}",
+        "data": {
+          "pin": "PIN"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to the TV MQTT broker on port 36669. Confirm the TV is on, the IP is correct, and phone remote control is enabled.",
+      "invalid_pin": "The PIN was not accepted. Try again before the on-screen dialog times out."
+    },
+    "abort": {
+      "already_configured": "This TV is already configured.",
+      "cannot_connect": "Could not connect to the TV."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Hisense E7N Pro options",
+        "data": {
+          "host": "TV IP address",
+          "port": "MQTT port",
+          "mac": "TV MAC (Wake-on-LAN)",
+          "name": "Name"
+        }
+      }
+    }
+  },
+  "entity": {
+    "media_player": {
+      "tv": {
+        "name": "TV"
+      }
+    },
+    "remote": {
+      "remote": {
+        "name": "Remote"
+      }
+    }
+  }
+}
