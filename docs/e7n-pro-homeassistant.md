@@ -38,7 +38,8 @@ E7N Pro（以及同代 E7N / E7NQ Pro）固件在 2024 之后通常还要：
 `custom_components/hisense_e7n`：
 
 - `media_player`：开关、音量、静音、输入源、播放/暂停；**关机后开机调用配置的 button 设备**（`button.press` / `switch.turn_on` / `script.turn_on`），不指望爱家 `KEY_POWER`
-- `remote`：发送 `KEY_*`（可用 Universal Remote Card）；关机状态下的电源键同样走 button
+- `remote`：发送 `KEY_*`（可用 Universal Remote Card）；关机状态下的电源键同样走开机按钮
+- `button`：爱家「电视」遥控页同款按键（电源、音量、截屏、信号源、AI识图、设置、方向键、OK、返回、首页、菜单）。「切换遥控模式」和底部语音是手机 App 能力，不映射成电视键
 - 配置流：IP → 连接（无 PIN）；可选绑定开机按钮
 - `iot_class: local_push`，不经过海信云
 
@@ -80,7 +81,20 @@ data:
   url: netflix
 ```
 
-爱家里出现过的键：`KEY_POWER`、`KEY_VOLUMEUP`、`KEY_VOLUMEDOWN`、`KEY_MUTE`、`KEY_UP`/`DOWN`/`LEFT`/`RIGHT`、`KEY_OK`、`KEY_RETURNS`、`KEY_HOME`、`KEY_MENU`、`KEY_MULTITASK`、`KEY_CONTROL_CENTER`、`KEY_BRIGHTUP`/`KEY_BRIGHTDOWN`、`KEY_JUBAO`。别名如 `home`、`ok`、`mute` 也可以。
+爱家遥控页对应关系：
+
+| 爱家按钮 | HA 实体 / 命令 |
+|---|---|
+| 电源 | `button.…_power` → `KEY_POWER`（电视离线时改按你配置的开机按钮） |
+| 音量 − / 静音 / 音量 + | `KEY_VOLUMEDOWN` / `KEY_MUTE` / `KEY_VOLUMEUP` |
+| 截屏 | `button.…_screenshot` → 爱家 `captureTvScreen` / `getTvScreenInfo` |
+| 信号源 | `button.…_source` → 刷新 `sourcelist` + `KEY_SOURCE` |
+| AI识图 | `button.…_smart_image` → 爱家 `pushSmartImage` |
+| 设置 | `KEY_CONTROL_CENTER` |
+| 方向键 / OK | `KEY_UP` `KEY_DOWN` `KEY_LEFT` `KEY_RIGHT` `KEY_OK` |
+| 返回 / 首页 / 菜单 | `KEY_RETURNS` / `KEY_HOME` / `KEY_MENU` |
+
+其它爱家字面量：`KEY_MULTITASK`、`KEY_BRIGHTUP` / `KEY_BRIGHTDOWN`、`KEY_JUBAO`。别名如 `home`、`ok`、`mute` 也可以。
 
 ## 添加集成时报「无法连接 36669」
 

@@ -18,7 +18,7 @@ import voluptuous as vol
 from .const import DATA_COORDINATOR, DOMAIN
 from .coordinator import HisenseTvCoordinator
 from .entity import HisenseTvEntity
-from .keys import KEY_POWER, normalize_key
+from .keys import KEY_POWER, aijia_send_commands, normalize_key
 
 
 async def async_setup_entry(
@@ -59,6 +59,10 @@ class HisenseTvRemote(HisenseTvEntity, RemoteEntity):
 
     async def async_send_key_service(self, key: str) -> None:
         await self.coordinator.client.async_send_key(normalize_key(key))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"commands": aijia_send_commands()}
 
     async def async_send_command(self, command: Iterable[str], **kwargs: Any) -> None:
         repeats = int(kwargs.get("num_repeats") or 1)
