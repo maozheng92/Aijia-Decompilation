@@ -1,0 +1,105 @@
+"""Hisense E7N Pro local VIDAA MQTT integration."""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_HOST, CONF_MAC, CONF_NAME, CONF_PORT, Platform
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
+
+from .certs_util import ensure_cert_pair
+from .const import (
+    CONF_AUTH_MODE,
+    CONF_CLIENT_CERT,
+    CONF_CLIENT_KEY,
+    CONF_CLIENT_UUID,
+    CONF_POWER_ON_BUTTON,
+    DATA_CLIENT,
+    DATA_COORDINATOR,
+    DEFAULT_AUTH_MODE,
+    DEFAULT_PORT,
+    DOMAIN,
+)
+from .coordinator import HisenseTvCoordinator
+from .credentials import random_client_uuid
+from .power import normalize_power_on_entity
+from .tv_client import HisenseTvClient
+
+_LOGGER = logging.getLogger(__name__)
+
+PLATFORMS: list[Platform] = [Platform.MEDIA_PLAYER, Platform.REMOTE]
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up one E7N Pro from a config entry."""
+    hass.data.setdefault(DOMAIN, {})
+
+    data = {**entry.data, **entry.options}
+    host = data[CONF_HOST]
+    port = int(data.get(CONF_PORT, DEFAULT_PORT))
+    uuid = data.get(CONF_CLIENT_UUID) or random_client_uuid()
+    certfile = data.get(CONF_CLIENT_CERT)
+    keyfile = data.get(CONF_CLIENT_KEY)
+
+    if not certfile or not keyfile:
+        cert_dir = Path(hass.config.config_dir) / "hisense_e7n" / entry.entry_id
+        certfile, keyfile = await hass.async_add_executor_job(ensure_cert_pair, cert_dir)
+
+    power_on_button = normalize_power_on_entity(data.get(CONF_POWER_ON_BUTTON))
+    client = HisenseTvClient(
+        host,
+        port=port,
+        uuid=uuid,
+        tv_mac=data.get(CONF_MAC),
+        auth_mode=data.get(CONF_AUTH_MODE, DEFAULT_AUTH_MODE),
+        certfile=certfile,
+        keyfile=keyfile,
+        loop=hass.loop,
+    )
+
+    try:
+        await client.async_connect()
+    except ConnectionError as err:
+        # Broker is down when the TV is fully off; still load if we can press
+        # a power-on button (or fall back to Wake-on-LAN).
+        if not power_on_button and not data.get(CONF_MAC):
+            raise ConfigEntryNotReady(f"Cannot reach Hisense TV at {host}:{port}") from err
+        _LOGGER.warning(
+            "TV at %s:%s is offline; turn-on will call %s (%s)",
+            host,
+            port,
+            power_on_button or data.get(CONF_MAC),
+            err,
+        )
+
+    coordinator = HisenseTvCoordinator(
+        hass,
+        client,
+        data.get(CONF_NAME, host),
+        power_on_button=power_on_button,
+    )
+    await coordinator.async_config_entry_first_refresh()
+
+    hass.data[DOMAIN][entry.entry_id] = {
+        DATA_CLIENT: client,
+        DATA_COORDINATOR: coordinator,
+    }
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    stored = hass.data[DOMAIN].pop(entry.entry_id, None)
+    if stored and DATA_CLIENT in stored:
+        await stored[DATA_CLIENT].async_disconnect()
+    return unload_ok
+
+
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    await hass.config_entries.async_reload(entry.entry_id)

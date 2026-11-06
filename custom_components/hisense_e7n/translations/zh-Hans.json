@@ -1,0 +1,97 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "海信 E7N Pro",
+        "description": "配对时电视需已开机。默认端口 36669（VIDAA 机内 MQTT / TLS）。爱家无法唤醒已关机的电视，请选择一个真正能开机的 Button 设备。",
+        "data": {
+          "host": "电视 IP",
+          "port": "MQTT 端口",
+          "power_on_button": "开机按钮",
+          "mac": "电视 MAC（可选）",
+          "name": "名称",
+          "auth_mode": "认证模式",
+          "client_cert": "客户端证书 PEM（可选）",
+          "client_key": "客户端私钥 PEM（可选）"
+        },
+        "data_description": {
+          "host": "给 E7N Pro 做 DHCP 地址预留，避免 IP 变化。",
+          "power_on_button": "选择一个能物理开机的 Home Assistant 实体：红外开机键、智能插座、辅助按钮或脚本。关机后开机调用 button.press（插座则 switch.turn_on），不再指望爱家/MQTT 的 KEY_POWER。",
+          "mac": "可选。用于设备登记；未配置开机按钮时才回退 Wake-on-LAN。",
+          "auth_mode": "auto 会先试新固件动态凭证，再回退旧固件静态账号。",
+          "client_cert": "留空则使用生成的占位证书。若 MQTT 返回 rc=5，请按文档放入爱家/VIDAA 客户端证书。"
+        }
+      },
+      "pin": {
+        "title": "与电视配对",
+        "description": "电视弹出 4 位 PIN 时填入。若没有弹窗，说明此客户端已授权，PIN 留空直接提交即可。\n\n{hint}",
+        "data": {
+          "pin": "PIN"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "无法连接电视 36669 端口的 MQTT。请确认电视已开机、IP 正确，并已打开手机遥控/网络控制。",
+      "invalid_pin": "PIN 未被接受。请在屏幕倒计时结束前重试。"
+    },
+    "abort": {
+      "already_configured": "这台电视已经添加过了。",
+      "cannot_connect": "无法连接电视。"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "海信 E7N Pro 选项",
+        "data": {
+          "host": "电视 IP",
+          "port": "MQTT 端口",
+          "power_on_button": "开机按钮",
+          "mac": "电视 MAC（可选）",
+          "name": "名称"
+        },
+        "data_description": {
+          "power_on_button": "电视关机后按下的实体。爱家本身无法开机。"
+        }
+      }
+    }
+  },
+  "entity": {
+    "media_player": {
+      "tv": {
+        "name": "电视"
+      }
+    },
+    "remote": {
+      "remote": {
+        "name": "遥控器"
+      }
+    }
+  },
+  "services": {
+    "send_key": {
+      "name": "发送遥控键",
+      "description": "向电视发送 VIDAA / 爱家 KEY_* 按键。",
+      "fields": {
+        "key": {
+          "name": "按键",
+          "description": "线路名（KEY_HOME）或别名（home、ok、mute）。"
+        }
+      }
+    },
+    "launch_app": {
+      "name": "打开应用",
+      "description": "按名称启动电视上的应用。",
+      "fields": {
+        "name": {
+          "name": "应用名",
+          "description": "例如 Netflix。"
+        },
+        "url": {
+          "name": "应用 URL / id",
+          "description": "可选，例如 netflix。"
+        }
+      }
+    }
+  }
+}

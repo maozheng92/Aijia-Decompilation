@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.venv/
+venv/
+custom_components/hisense_e7n/certs/*.pem
+custom_components/hisense_e7n/certs/*.key
+custom_components/hisense_e7n/certs/*.p12
+custom_components/hisense_e7n/certs/*.crt

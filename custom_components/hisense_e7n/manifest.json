@@ -1,0 +1,13 @@
+{
+  "domain": "hisense_e7n",
+  "name": "Hisense E7N Pro",
+  "codeowners": ["@maozheng92"],
+  "config_flow": true,
+  "documentation": "https://github.com/maozheng92/Aijia-Decompilation/blob/main/docs/e7n-pro-homeassistant.md",
+  "integration_type": "device",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/maozheng92/Aijia-Decompilation/issues",
+  "loggers": ["custom_components.hisense_e7n"],
+  "requirements": ["paho-mqtt>=1.6.1,<3"],
+  "version": "1.1.0"
+}
