@@ -25,7 +25,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import HisenseTvCoordinator
-from .credentials import random_client_uuid
+from .credentials import prefer_tv_mac_uuid
 from .power import normalize_power_on_entity
 from .tv_client import HisenseTvClient
 
@@ -41,7 +41,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data = {**entry.data, **entry.options}
     host = data[CONF_HOST]
     port = int(data.get(CONF_PORT, DEFAULT_PORT))
-    uuid = data.get(CONF_CLIENT_UUID) or random_client_uuid()
+    uuid = prefer_tv_mac_uuid(data.get(CONF_CLIENT_UUID), data.get(CONF_MAC))
     certfile = data.get(CONF_CLIENT_CERT)
     keyfile = data.get(CONF_CLIENT_KEY)
     cert_dir = Path(hass.config.config_dir) / "hisense_e7n" / entry.entry_id

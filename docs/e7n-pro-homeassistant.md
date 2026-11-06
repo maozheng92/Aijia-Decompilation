@@ -15,17 +15,23 @@ E7N Pro 是 **VIDAA** 智能电视（国内与爱家 App 配套）。结合 `com
 爱家 APK 里的 `sendKeyByMqtt`、`tryPushLocalRemoter`、`{"key":"KEY_POWER"}` 与 VIDAA topic
 
 ```text
-/remoteapp/tv/remote_service/<client_id>/actions/sendkey
-payload: KEY_POWER
+/remoteapp/tv/remote_service/<identity>/actions/sendkey
+payload: KEY_POWER          （VIDAA 原文；JSON {"key":"KEY_POWER"} 是爱家云格式）
 ```
 
-是同一套键值。E7N Pro（以及同代 E7N / E7NQ Pro）固件在 2024 之后通常还要：
+`<identity>` **不等于** MQTT CONNECT 的 `client_id`。电视实际监听的是：
+
+- `{电视MAC}$vidaa_common`（社区 RemoteNOW / 较新 VIDAA）
+- `{电视MAC}$normal`（爱家 / newAM）
+- 以及当前会话的 `client_id`
+
+MQTT 能连上但所有按键无反应，几乎都是发到了 `hisense_ha_…` 或随机 UUID，电视把报文丢掉。配置里请填写电视 MAC；集成会向上述身份各发一遍（原文 `KEY_*` 和爱家 JSON）。
+
+E7N Pro（以及同代 E7N / E7NQ Pro）固件在 2024 之后通常还要：
 
 1. **动态 MQTT 用户名/密码**（由客户端 UUID + 时间戳算出，旧账号 `hisenseservice` / `multimqttservice` 会 rc=5）
 2. **爱家手机配对不需要 PIN**，MQTT 连通即可
 3. TLS 上的客户端证书（很多机器只检查「有证书」；严格固件才要官方 VIDAA/爱家证书）
-
-`<client_id>` 必须是动态算法生成的那个，不能写死 `HomeAssistant`，否则按键会被静默丢掉。
 
 ## 集成做什么
 
@@ -41,7 +47,7 @@ payload: KEY_POWER
 1. 把整个 `custom_components/hisense_e7n` 拷到 Home Assistant 的 `config/custom_components/`。
 2. 重启 Home Assistant。
 3. **设置 → 设备与服务 → 添加集成 → Hisense E7N Pro**。
-4. 电视保持开机，填 IP。**开机按钮**选一个能物理打开电视的实体（红外开机键、智能插座、辅助按钮、脚本）。爱家 App 无法开机，集成不会再靠 MQTT `KEY_POWER` 唤醒关机的电视。
+4. 电视保持开机，填 IP 和 **电视 MAC**（设置 → 网络 / 关于本机）。按键 topic 认 MAC，不填则 MQTT 能连上但遥控无反应。**开机按钮**选一个能物理打开电视的实体（红外开机键、智能插座、辅助按钮、脚本）。爱家 App 无法开机，集成不会再靠 MQTT `KEY_POWER` 唤醒关机的电视。
 5. 爱家配对不需要 PIN，MQTT 连上后直接完成添加。
 6. 已添加的集成可在选项里补选或更换开机按钮。
 

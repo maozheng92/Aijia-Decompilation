@@ -38,4 +38,25 @@ def test_static_credentials(proto_credentials) -> None:
     creds = proto_credentials.generate_static_credentials("aa:bb:cc:dd:ee:ff")
     assert creds.username == "hisenseservice"
     assert creds.password == "multimqttservice"
-    assert creds.client_id.startswith("hisense_ha_")
+    assert creds.client_id == "aa:bb:cc:dd:ee:ff$vidaa_common"
+    assert proto_credentials.generate_static_credentials(
+        "aa:bb:cc:dd:ee:ff", flavor="normal"
+    ).client_id == "aa:bb:cc:dd:ee:ff$normal"
+
+
+def test_prefer_tv_mac_uuid(proto_credentials) -> None:
+    assert (
+        proto_credentials.prefer_tv_mac_uuid("12:34:56:78:9a:bc", "AA-BB-CC-DD-EE-FF")
+        == "aa:bb:cc:dd:ee:ff"
+    )
+    assert (
+        proto_credentials.prefer_tv_mac_uuid("12:34:56:78:9a:bc", None)
+        == "12:34:56:78:9a:bc"
+    )
+
+
+def test_auto_mode_includes_mac_shaped_static(proto_credentials) -> None:
+    modes = [item.client_id for item in proto_credentials.credentials_for_mode("auto", "aa:bb:cc:dd:ee:ff")]
+    assert "aa:bb:cc:dd:ee:ff$vidaa_common" in modes
+    assert "aa:bb:cc:dd:ee:ff$normal" in modes
+    assert not any(item.startswith("hisense_ha_") for item in modes)

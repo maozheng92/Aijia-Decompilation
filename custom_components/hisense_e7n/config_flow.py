@@ -39,7 +39,7 @@ from .const import (
     DEFAULT_PORT,
     DOMAIN,
 )
-from .credentials import random_client_uuid
+from .credentials import prefer_tv_mac_uuid
 from .power import POWER_ON_DOMAINS, normalize_power_on_entity
 from .tv_client import HisenseTvClient, classify_connect_error
 
@@ -81,7 +81,7 @@ class HisenseE7NConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             host = user_input[CONF_HOST].strip()
             port = int(user_input.get(CONF_PORT, DEFAULT_PORT))
-            uuid = random_client_uuid()
+            uuid = prefer_tv_mac_uuid(None, user_input.get(CONF_MAC))
             certfile = (user_input.get(CONF_CLIENT_CERT) or "").strip() or None
             keyfile = (user_input.get(CONF_CLIENT_KEY) or "").strip() or None
             cert_dir = Path(self.hass.config.config_dir) / "hisense_e7n" / "setup"
