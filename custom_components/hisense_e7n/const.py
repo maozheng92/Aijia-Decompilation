@@ -13,6 +13,7 @@ CONF_CLIENT_CERT = "client_cert"
 CONF_CLIENT_KEY = "client_key"
 CONF_ACCESS_TOKEN = "access_token"
 CONF_REFRESH_TOKEN = "refresh_token"
+CONF_POWER_ON_BUTTON = "power_on_button"
 
 AUTH_MODE_AUTO = "auto"
 AUTH_MODE_DYNAMIC = "dynamic"

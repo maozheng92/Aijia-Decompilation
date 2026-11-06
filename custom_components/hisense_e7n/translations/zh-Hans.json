@@ -3,11 +3,12 @@
     "step": {
       "user": {
         "title": "海信 E7N Pro",
-        "description": "电视需已开机且与 Home Assistant 在同一局域网。默认端口 36669（VIDAA 机内 MQTT / TLS）。",
+        "description": "配对时电视需已开机。默认端口 36669（VIDAA 机内 MQTT / TLS）。爱家无法唤醒已关机的电视，请选择一个真正能开机的 Button 设备。",
         "data": {
           "host": "电视 IP",
           "port": "MQTT 端口",
-          "mac": "电视 MAC（网络唤醒）",
+          "power_on_button": "开机按钮",
+          "mac": "电视 MAC（可选）",
           "name": "名称",
           "auth_mode": "认证模式",
           "client_cert": "客户端证书 PEM（可选）",
@@ -15,7 +16,8 @@
         },
         "data_description": {
           "host": "给 E7N Pro 做 DHCP 地址预留，避免 IP 变化。",
-          "mac": "深度待机后开机需要 Wake-on-LAN。",
+          "power_on_button": "选择一个能物理开机的 Home Assistant 实体：红外开机键、智能插座、辅助按钮或脚本。关机后开机调用 button.press（插座则 switch.turn_on），不再指望爱家/MQTT 的 KEY_POWER。",
+          "mac": "可选。用于设备登记；未配置开机按钮时才回退 Wake-on-LAN。",
           "auth_mode": "auto 会先试新固件动态凭证，再回退旧固件静态账号。",
           "client_cert": "留空则使用生成的占位证书。若 MQTT 返回 rc=5，请按文档放入爱家/VIDAA 客户端证书。"
         }
@@ -44,8 +46,12 @@
         "data": {
           "host": "电视 IP",
           "port": "MQTT 端口",
-          "mac": "电视 MAC（网络唤醒）",
+          "power_on_button": "开机按钮",
+          "mac": "电视 MAC（可选）",
           "name": "名称"
+        },
+        "data_description": {
+          "power_on_button": "电视关机后按下的实体。爱家本身无法开机。"
         }
       }
     }

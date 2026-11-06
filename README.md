@@ -13,7 +13,7 @@ E7N Pro 结论与安装：[docs/e7n-pro-homeassistant.md](docs/e7n-pro-homeassis
 
 目录：`custom_components/hisense_e7n`
 
-拷到 HA 的 `config/custom_components/` 后重启，在「添加集成」里搜 **Hisense E7N Pro**。电视需已开机；建议填写 MAC 以便 Wake-on-LAN。
+拷到 HA 的 `config/custom_components/` 后重启，在「添加集成」里搜 **Hisense E7N Pro**。配对时电视需已开机。爱家无法唤醒关机的电视，请在配置里选择一个开机用的 **button / 开关 / 脚本**（红外电源键或智能插座），`media_player.turn_on` 会调用它而不是 MQTT `KEY_POWER`。
 
 ```text
 custom_components/hisense_e7n/   # 本仓库

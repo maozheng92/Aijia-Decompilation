@@ -496,21 +496,30 @@ class HisenseTvClient:
     async def async_launch_app(self, name: str, url: str | None = None) -> None:
         await asyncio.get_running_loop().run_in_executor(None, self.launch_app, name, url)
 
-    async def async_turn_on(self) -> None:
+    async def async_wait_for_broker(self) -> bool:
+        """Retry MQTT after a physical power-on (button / WoL)."""
         if self.state.available:
-            return
-        if self.tv_mac:
-            await asyncio.get_running_loop().run_in_executor(None, send_wol, self.tv_mac)
-        else:
-            _LOGGER.warning("Cannot wake TV: no MAC address configured")
-            return
+            return True
         for delay in (3, 5, 8, 13, 21):
             await asyncio.sleep(delay)
             try:
                 await self.async_connect()
-                return
+                return True
             except ConnectionError:
-                _LOGGER.debug("TV not up yet after WoL, retrying")
+                _LOGGER.debug("TV broker not up yet, retrying")
+        return False
+
+    async def async_turn_on(self) -> None:
+        """Wake via Wake-on-LAN when no HA button is configured."""
+        if self.state.available:
+            return
+        if self.tv_mac:
+            await asyncio.get_running_loop().run_in_executor(None, send_wol, self.tv_mac)
+            await self.async_wait_for_broker()
+            return
+        _LOGGER.warning(
+            "Cannot wake TV: configure a power-on button entity (Aijia cannot power on a dead TV)"
+        )
 
     async def async_turn_off(self) -> None:
         if self.state.available:

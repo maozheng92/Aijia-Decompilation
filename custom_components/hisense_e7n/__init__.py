@@ -16,6 +16,7 @@ from .const import (
     CONF_CLIENT_CERT,
     CONF_CLIENT_KEY,
     CONF_CLIENT_UUID,
+    CONF_POWER_ON_BUTTON,
     DATA_CLIENT,
     DATA_COORDINATOR,
     DEFAULT_AUTH_MODE,
@@ -24,6 +25,7 @@ from .const import (
 )
 from .coordinator import HisenseTvCoordinator
 from .credentials import random_client_uuid
+from .power import normalize_power_on_entity
 from .tv_client import HisenseTvClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -46,6 +48,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         cert_dir = Path(hass.config.config_dir) / "hisense_e7n" / entry.entry_id
         certfile, keyfile = await hass.async_add_executor_job(ensure_cert_pair, cert_dir)
 
+    power_on_button = normalize_power_on_entity(data.get(CONF_POWER_ON_BUTTON))
     client = HisenseTvClient(
         host,
         port=port,
@@ -60,17 +63,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         await client.async_connect()
     except ConnectionError as err:
-        # Broker is down in deep standby; still load if we can Wake-on-LAN.
-        if not data.get(CONF_MAC):
+        # Broker is down when the TV is fully off; still load if we can press
+        # a power-on button (or fall back to Wake-on-LAN).
+        if not power_on_button and not data.get(CONF_MAC):
             raise ConfigEntryNotReady(f"Cannot reach Hisense TV at {host}:{port}") from err
         _LOGGER.warning(
-            "TV at %s:%s is offline; entities will stay off until Wake-on-LAN (%s)",
+            "TV at %s:%s is offline; turn-on will call %s (%s)",
             host,
             port,
+            power_on_button or data.get(CONF_MAC),
             err,
         )
 
-    coordinator = HisenseTvCoordinator(hass, client, data.get(CONF_NAME, host))
+    coordinator = HisenseTvCoordinator(
+        hass,
+        client,
+        data.get(CONF_NAME, host),
+        power_on_button=power_on_button,
+    )
     await coordinator.async_config_entry_first_refresh()
 
     hass.data[DOMAIN][entry.entry_id] = {

@@ -16,6 +16,8 @@ try:
 except ImportError:  # pragma: no cover - HA < 2024.4
     from homeassistant.data_entry_flow import FlowResult as ConfigFlowResult
 from homeassistant.helpers.selector import (
+    EntitySelector,
+    EntitySelectorConfig,
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
@@ -30,13 +32,19 @@ from .const import (
     CONF_CLIENT_CERT,
     CONF_CLIENT_KEY,
     CONF_CLIENT_UUID,
+    CONF_POWER_ON_BUTTON,
     DEFAULT_AUTH_MODE,
     DEFAULT_NAME,
     DEFAULT_PORT,
     DOMAIN,
 )
 from .credentials import random_client_uuid
+from .power import POWER_ON_DOMAINS, normalize_power_on_entity
 from .tv_client import HisenseTvClient
+
+POWER_ON_BUTTON_SELECTOR = EntitySelector(
+    EntitySelectorConfig(domain=list(POWER_ON_DOMAINS), multiple=False)
+)
 
 STEP_USER_DATA = vol.Schema(
     {
@@ -44,6 +52,7 @@ STEP_USER_DATA = vol.Schema(
         vol.Optional(CONF_PORT, default=DEFAULT_PORT): vol.All(
             vol.Coerce(int), vol.Range(min=1, max=65535)
         ),
+        vol.Optional(CONF_POWER_ON_BUTTON): POWER_ON_BUTTON_SELECTOR,
         vol.Optional(CONF_MAC): TextSelector(TextSelectorConfig(type="text")),
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): str,
         vol.Optional(CONF_AUTH_MODE, default=DEFAULT_AUTH_MODE): SelectSelector(
@@ -104,6 +113,10 @@ class HisenseE7NConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_HOST: host,
                     CONF_PORT: port,
                     CONF_MAC: (user_input.get(CONF_MAC) or "").strip(),
+                    CONF_POWER_ON_BUTTON: normalize_power_on_entity(
+                        user_input.get(CONF_POWER_ON_BUTTON)
+                    )
+                    or "",
                     CONF_NAME: user_input.get(CONF_NAME) or DEFAULT_NAME,
                     CONF_AUTH_MODE: user_input.get(CONF_AUTH_MODE, DEFAULT_AUTH_MODE),
                     CONF_CLIENT_UUID: uuid,
@@ -165,7 +178,7 @@ class HisenseE7NConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class HisenseE7NOptionsFlow(config_entries.OptionsFlow):
-    """Tune host / MAC / port without re-pairing."""
+    """Tune host, power-on button, and MAC without re-pairing."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry | None = None) -> None:
         if config_entry is not None:
@@ -175,18 +188,33 @@ class HisenseE7NOptionsFlow(config_entries.OptionsFlow):
         return getattr(self, "_config_entry", None) or self.config_entry
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        data = {**self._entry().data, **self._entry().options}
         if user_input is not None:
+            if CONF_POWER_ON_BUTTON in user_input:
+                user_input[CONF_POWER_ON_BUTTON] = (
+                    normalize_power_on_entity(user_input.get(CONF_POWER_ON_BUTTON)) or ""
+                )
+            else:
+                user_input[CONF_POWER_ON_BUTTON] = (
+                    normalize_power_on_entity(data.get(CONF_POWER_ON_BUTTON)) or ""
+                )
             return self.async_create_entry(title="", data=user_input)
 
-        data = {**self._entry().data, **self._entry().options}
         schema = vol.Schema(
             {
                 vol.Required(CONF_HOST, default=data.get(CONF_HOST, "")): str,
                 vol.Optional(CONF_PORT, default=data.get(CONF_PORT, DEFAULT_PORT)): vol.All(
                     vol.Coerce(int), vol.Range(min=1, max=65535)
                 ),
+                vol.Optional(CONF_POWER_ON_BUTTON): POWER_ON_BUTTON_SELECTOR,
                 vol.Optional(CONF_MAC, default=data.get(CONF_MAC, "")): str,
                 vol.Optional(CONF_NAME, default=data.get(CONF_NAME, DEFAULT_NAME)): str,
             }
         )
-        return self.async_show_form(step_id="init", data_schema=schema)
+        suggested = dict(data)
+        if not normalize_power_on_entity(suggested.get(CONF_POWER_ON_BUTTON)):
+            suggested.pop(CONF_POWER_ON_BUTTON, None)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(schema, suggested),
+        )

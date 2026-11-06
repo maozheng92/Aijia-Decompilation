@@ -52,7 +52,7 @@ class HisenseTvRemote(HisenseTvEntity, RemoteEntity):
         return (self.coordinator.data or self.coordinator.client.state).available
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        await self.coordinator.client.async_turn_on()
+        await self.coordinator.async_turn_on()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         await self.coordinator.client.async_turn_off()
@@ -67,7 +67,7 @@ class HisenseTvRemote(HisenseTvEntity, RemoteEntity):
             key = normalize_key(str(raw))
             for _ in range(max(1, repeats)):
                 if key == KEY_POWER and not self.coordinator.client.state.available:
-                    await self.coordinator.client.async_turn_on()
+                    await self.coordinator.async_turn_on()
                 else:
                     await self.coordinator.client.async_send_key(key)
                 if delay:

@@ -30,4 +30,9 @@ class HisenseTvEntity(CoordinatorEntity[HisenseTvCoordinator]):
             model="E7N Pro",
             name=entry.data.get(CONF_NAME) or DEFAULT_NAME,
         )
-        self._attr_available = coordinator.client.state.available or bool(mac)
+
+    @property
+    def available(self) -> bool:
+        if self.coordinator.client.state.available:
+            return True
+        return self.coordinator.can_power_on

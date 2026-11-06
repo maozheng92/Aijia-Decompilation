@@ -13,7 +13,6 @@ from homeassistant.components.media_player import (
     MediaPlayerState,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_MAC
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_platform
@@ -69,14 +68,6 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
         self._attr_unique_id = f"{entry.entry_id}_media_player"
 
     @property
-    def available(self) -> bool:
-        state = self.coordinator.client.state
-        if state.available:
-            return True
-        mac = (self._entry.data.get(CONF_MAC) or self._entry.options.get(CONF_MAC) or "").strip()
-        return bool(mac)
-
-    @property
     def state(self) -> MediaPlayerState:
         tv = self.coordinator.data or self.coordinator.client.state
         if not tv.available:
@@ -115,7 +106,7 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
         return names or None
 
     async def async_turn_on(self) -> None:
-        await self.coordinator.client.async_turn_on()
+        await self.coordinator.async_turn_on()
 
     async def async_turn_off(self) -> None:
         await self.coordinator.client.async_turn_off()
