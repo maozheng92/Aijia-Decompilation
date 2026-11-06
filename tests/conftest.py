@@ -59,8 +59,12 @@ def proto_topics(proto_credentials):
 
 
 @pytest.fixture(scope="session")
-def proto_client(proto_topics, proto_keys, proto_const):
-    load_proto("certs_util")
+def proto_certs():
+    return load_proto("certs_util")
+
+
+@pytest.fixture(scope="session")
+def proto_client(proto_topics, proto_keys, proto_const, proto_certs):
     return load_proto("tv_client")
 
 
