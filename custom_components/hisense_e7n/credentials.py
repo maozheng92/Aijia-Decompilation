@@ -53,6 +53,25 @@ def normalize_uuid(uuid: str) -> str:
     return ":".join(parts)
 
 
+def prefer_tv_mac_uuid(stored: str | None, tv_mac: str | None) -> str:
+    """Use the TV MAC as MQTT UUID when the user supplied one.
+
+    RemoteNOW / 爱家 topic identity is ``{MAC}$vidaa_common`` (or ``$normal``).
+    A random locally-administered UUID still connects, but sendkey is dropped.
+    """
+    if tv_mac:
+        try:
+            return normalize_uuid(tv_mac)
+        except ValueError:
+            pass
+    if stored:
+        try:
+            return normalize_uuid(stored)
+        except ValueError:
+            pass
+    return random_client_uuid()
+
+
 @dataclass(frozen=True)
 class MqttCredentials:
     client_id: str
@@ -93,17 +112,25 @@ def generate_dynamic_credentials(
     )
 
 
-def generate_static_credentials(uuid: str) -> MqttCredentials:
-    """Pre-2024 firmware: shared broker user, arbitrary client id."""
+def generate_static_credentials(uuid: str, *, flavor: str = "vidaa_common") -> MqttCredentials:
+    """Pre-2024 firmware: shared broker user; topic identity must be MAC-shaped."""
     uuid = normalize_uuid(uuid)
-    compact = uuid.replace(":", "")
+    if flavor == "normal":
+        client_id = f"{uuid}$normal"
+        mode = "static_normal"
+    elif flavor == "bare":
+        client_id = uuid
+        mode = "static_bare"
+    else:
+        client_id = f"{uuid}$vidaa_common"
+        mode = "static"
     return MqttCredentials(
-        client_id=f"hisense_ha_{compact}",
+        client_id=client_id,
         username=STATIC_MQTT_USERNAME,
         password=STATIC_MQTT_PASSWORD,
         uuid=uuid,
         timestamp=0,
-        mode="static",
+        mode=mode,
     )
 
 
@@ -112,9 +139,13 @@ def credentials_for_mode(mode: str, uuid: str) -> list[MqttCredentials]:
     mode = (mode or "auto").lower()
     dynamic_modern = generate_dynamic_credentials(uuid, modern=True)
     dynamic_legacy = generate_dynamic_credentials(uuid, modern=False)
-    static = generate_static_credentials(uuid)
+    statics = [
+        generate_static_credentials(uuid, flavor="vidaa_common"),
+        generate_static_credentials(uuid, flavor="normal"),
+        generate_static_credentials(uuid, flavor="bare"),
+    ]
     if mode == "static":
-        return [static]
+        return statics
     if mode == "dynamic":
         return [dynamic_modern, dynamic_legacy]
-    return [dynamic_modern, dynamic_legacy, static]
+    return [dynamic_modern, dynamic_legacy, *statics]

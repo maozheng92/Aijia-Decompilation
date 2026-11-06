@@ -8,7 +8,7 @@
           "host": "TV IP address",
           "port": "MQTT port",
           "power_on_button": "Power-on button",
-          "mac": "TV MAC (optional)",
+          "mac": "TV MAC",
           "name": "Name",
           "auth_mode": "Auth mode",
           "client_cert": "Client certificate PEM (optional)",
@@ -17,7 +17,7 @@
         "data_description": {
           "host": "IPv4 of the E7N Pro. Give it a DHCP reservation.",
           "power_on_button": "Home Assistant button / switch / script that physically turns the TV on (IR blaster key, smart plug, helper button). Turn-on calls button.press (or switch.turn_on). MQTT KEY_POWER cannot start a dead TV.",
-          "mac": "Optional. Used for the device registry and as a Wake-on-LAN fallback if no button is set.",
+          "mac": "Fill this in. The TV only accepts remote keys when the topic identity is the TV MAC plus $vidaa_common or $normal. Also used for Wake-on-LAN if no power-on button is set.",
           "auth_mode": "auto tries modern VIDAA credentials first, then legacy static login.",
           "client_cert": "Leave empty to use a generated stand-in cert. If MQTT rc=5, extract the VIDAA/爱家 client cert (see docs)."
         }
@@ -42,11 +42,12 @@
           "host": "TV IP address",
           "port": "MQTT port",
           "power_on_button": "Power-on button",
-          "mac": "TV MAC (optional)",
+          "mac": "TV MAC",
           "name": "Name"
         },
         "data_description": {
-          "power_on_button": "Entity pressed when the TV is off. Aijia cannot power the TV on by itself."
+          "power_on_button": "Entity pressed when the TV is off. Aijia cannot power the TV on by itself.",
+          "mac": "Fill in the TV MAC. Without it MQTT can connect while remote keys do nothing."
         }
       }
     }

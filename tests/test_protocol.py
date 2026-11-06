@@ -22,6 +22,22 @@ def test_sendkey_topic_uses_client_id(proto_credentials, proto_topics) -> None:
     assert "HomeAssistant" not in topic
 
 
+def test_sendkey_fanout_includes_tv_mac_identities(proto_credentials, proto_topics) -> None:
+    creds = proto_credentials.generate_dynamic_credentials(
+        "12:34:56:78:9a:bc", timestamp=1766974704
+    )
+    topics = proto_topics.action_topics(
+        creds, "remote_service", "sendkey", tv_mac="aa:bb:cc:dd:ee:ff"
+    )
+    assert any(
+        item.endswith("/aa:bb:cc:dd:ee:ff$vidaa_common/actions/sendkey") for item in topics
+    )
+    assert any(item.endswith("/aa:bb:cc:dd:ee:ff$normal/actions/sendkey") for item in topics)
+    assert any(item.endswith("/AA:BB:CC:DD:EE:FF$normal/actions/sendkey") for item in topics)
+    assert any("/12:34:56:78:9a:bc$vidaa_common/actions/sendkey" in item for item in topics)
+    assert creds.client_id in topics[0]
+
+
 def test_pair_topic_and_subscriptions_are_concrete(proto_credentials, proto_topics) -> None:
     creds = proto_credentials.generate_dynamic_credentials(
         "56:b8:88:4e:f7:19", timestamp=1766974704
@@ -46,6 +62,41 @@ def test_volume_and_source_parsing(proto_client) -> None:
     client._apply_state({"statetype": "remote_launcher", "sourcename": "HDMI1"})
     assert client.state.power_on is True
     assert client.state.statetype == "remote_launcher"
+
+
+def test_send_key_publishes_raw_and_json_on_mac_topics(proto_client, proto_credentials) -> None:
+    client = proto_client.HisenseTvClient(
+        "127.0.0.1",
+        uuid="12:34:56:78:9a:bc",
+        tv_mac="aa:bb:cc:dd:ee:ff",
+    )
+    client._creds = proto_credentials.generate_dynamic_credentials(
+        "12:34:56:78:9a:bc", timestamp=1
+    )
+    published: list[tuple[str, str]] = []
+
+    class FakeMqtt:
+        def publish(self, topic, body, qos=0, retain=False):
+            published.append((topic, body))
+
+            class Info:
+                rc = proto_client.mqtt.MQTT_ERR_SUCCESS
+
+                def wait_for_publish(self, timeout=None):
+                    return None
+
+            return Info()
+
+    client._client = FakeMqtt()
+    client.send_key("home")
+    topics = [topic for topic, _ in published]
+    payloads = [payload for _, payload in published]
+    assert any(
+        topic.endswith("/aa:bb:cc:dd:ee:ff$vidaa_common/actions/sendkey") for topic in topics
+    )
+    assert any(topic.endswith("/aa:bb:cc:dd:ee:ff$normal/actions/sendkey") for topic in topics)
+    assert "KEY_HOME" in payloads
+    assert '{"key":"KEY_HOME"}' in payloads
 
 
 def test_wol_packet_shape(proto_client, monkeypatch) -> None:

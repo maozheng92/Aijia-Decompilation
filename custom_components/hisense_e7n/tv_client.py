@@ -31,7 +31,6 @@ from .const import (
 from .credentials import (
     MqttCredentials,
     credentials_for_mode,
-    generate_static_credentials,
     normalize_uuid,
 )
 from .keys import KEY_POWER, normalize_key
@@ -41,7 +40,7 @@ _LOGGER = logging.getLogger(__name__)
 CONNECT_PAYLOAD = {
     "app_version": 2,
     "connect_result": 0,
-    "device_type": "Home Assistant",
+    "device_type": "VIDAALiteMQTT",
 }
 
 
@@ -254,6 +253,21 @@ class HisenseTvClient:
             self.state.source_id = str(sid)
         self.state.power_on = True
         self._apply_volume(data)
+        self._maybe_learn_tv_mac(data)
+
+    def _maybe_learn_tv_mac(self, data: Any) -> None:
+        if self.tv_mac or not isinstance(data, dict):
+            return
+        for key in ("mac", "MAC", "tv_mac", "devicemac", "deviceMac"):
+            value = data.get(key)
+            if not value:
+                continue
+            try:
+                self.tv_mac = normalize_uuid(str(value))
+                _LOGGER.info("Learned TV MAC %s from MQTT state", self.tv_mac)
+                return
+            except ValueError:
+                continue
 
     def _apply_sources(self, data: Any) -> None:
         items = data
@@ -326,15 +340,19 @@ class HisenseTvClient:
         self.state.power_on = True
         self.state.last_error = None
         if self._creds:
-            for topic in topics.subscription_topics(self._creds):
+            for topic in topics.subscription_topics(self._creds, self.tv_mac):
                 client.subscribe(topic, qos=0)
         self._set_loop_event(self._connected_event)
         self._notify()
         if self._creds:
-            self._publish(topics.gettvstate(self._creds), "")
-            self._publish(topics.getvolume(self._creds), "")
-            self._publish(topics.sourcelist(self._creds), "")
-            self._publish(topics.applist(self._creds), "")
+            try:
+                self.start_pairing()
+            except Exception:  # noqa: BLE001 — announce must not break CONNECT
+                _LOGGER.debug("Client announce after CONNECT failed", exc_info=True)
+            self._publish_action("ui_service", "gettvstate", "")
+            self._publish_action("platform_service", "getvolume", "")
+            self._publish_action("ui_service", "sourcelist", "")
+            self._publish_action("ui_service", "applist", "")
 
     def _on_disconnect(self, client: mqtt.Client, userdata: Any, *args: Any, **kwargs: Any) -> None:
         reason_code: Any = 0
@@ -353,7 +371,7 @@ class HisenseTvClient:
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Failed handling MQTT message on %s", message.topic)
 
-    def _publish(self, topic: str, payload: Any) -> None:
+    def _publish(self, topic: str, payload: Any, *, wait: bool = False) -> None:
         if self._client is None:
             raise RuntimeError("MQTT client is not connected")
         if payload is None:
@@ -366,6 +384,18 @@ class HisenseTvClient:
         _LOGGER.debug("MQTT %s -> %s", topic, body)
         if info.rc != mqtt.MQTT_ERR_SUCCESS:
             raise RuntimeError(f"Publish failed rc={info.rc} topic={topic}")
+        if not wait:
+            return
+        wait_fn = getattr(info, "wait_for_publish", None)
+        if not callable(wait_fn):
+            return
+        try:
+            wait_fn(timeout=1.5)
+        except TypeError:
+            # paho 1.x wait_for_publish() has no timeout; do not block HA.
+            return
+        except Exception:  # noqa: BLE001 — some brokers never ack QoS 0
+            return
 
     def _stop_client(self) -> None:
         client = self._client
@@ -426,13 +456,12 @@ class HisenseTvClient:
         return self._connect_rc
 
     def _credential_sets(self, use_tls: bool) -> list[MqttCredentials]:
-        if not use_tls:
-            return [generate_static_credentials(self.uuid)]
-        candidates = credentials_for_mode(self.auth_mode, self.uuid)
+        mode = "static" if not use_tls else self.auth_mode
+        candidates = credentials_for_mode(mode, self.uuid)
         mac = (self.tv_mac or "").strip()
         if mac:
             try:
-                extra = credentials_for_mode(self.auth_mode, mac)
+                extra = credentials_for_mode(mode, mac)
             except ValueError:
                 extra = []
             for creds in extra:
@@ -517,43 +546,64 @@ class HisenseTvClient:
             raise RuntimeError("Not connected")
         return self._creds
 
-    def send_key(self, key: str) -> None:
+    def _publish_action(
+        self,
+        service: str,
+        action: str,
+        payload: Any,
+        *,
+        as_key: bool = False,
+    ) -> None:
         creds = self._require_creds()
-        self._publish(topics.sendkey(creds), normalize_key(key))
+        if as_key:
+            name = normalize_key(str(payload))
+            bodies: list[Any] = [name, {"key": name}]
+        else:
+            bodies = [payload]
+        last_error: Exception | None = None
+        sent = 0
+        for topic in topics.action_topics(creds, service, action, self.tv_mac):
+            for body in bodies:
+                try:
+                    self._publish(topic, body, wait=sent == 0)
+                    sent += 1
+                except RuntimeError as err:
+                    last_error = err
+        if sent == 0 and last_error is not None:
+            raise last_error
+
+    def send_key(self, key: str) -> None:
+        self._publish_action("remote_service", "sendkey", key, as_key=True)
 
     def set_volume(self, volume: int) -> None:
-        creds = self._require_creds()
         volume = max(0, min(100, int(volume)))
-        self._publish(topics.changevolume(creds), str(volume))
+        self._publish_action("platform_service", "changevolume", str(volume))
         self.state.volume = volume
 
     def change_source(self, source_id: str, source_name: str | None = None) -> None:
-        creds = self._require_creds()
         payload: dict[str, str] = {"sourceid": str(source_id)}
         if source_name:
             payload["sourcename"] = source_name
-        self._publish(topics.changesource(creds), payload)
+        self._publish_action("ui_service", "changesource", payload)
 
     def launch_app(self, name: str, url: str | None = None) -> None:
-        creds = self._require_creds()
         payload = {
             "name": name,
             "urlType": 37,
             "storeType": 0,
             "url": url or name.lower().replace(" ", ""),
         }
-        self._publish(topics.launchapp(creds), payload)
+        self._publish_action("ui_service", "launchapp", payload)
 
     def refresh_status(self) -> None:
-        creds = self._require_creds()
-        self._publish(topics.gettvstate(creds), "")
-        self._publish(topics.getvolume(creds), "")
+        self._publish_action("ui_service", "gettvstate", "")
+        self._publish_action("platform_service", "getvolume", "")
 
     def start_pairing(self) -> None:
         """Announce this client. 爱家 / E7N Pro does not use an on-screen PIN."""
-        creds = self._require_creds()
-        self._publish(
-            topics.login_each_other_info(creds),
+        self._publish_action(
+            "ui_service",
+            "login_each_other_info",
             {
                 "type": "login",
                 "tvLogin": False,
@@ -563,7 +613,7 @@ class HisenseTvClient:
                 "mobileDeviceId": self.uuid,
             },
         )
-        self._publish(topics.vidaa_app_connect(creds), CONNECT_PAYLOAD)
+        self._publish_action("ui_service", "vidaa_app_connect", CONNECT_PAYLOAD)
 
     async def async_pair(self) -> TvState:
         """Register with the TV without waiting for a PIN."""
