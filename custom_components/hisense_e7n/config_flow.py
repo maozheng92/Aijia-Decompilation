@@ -75,7 +75,6 @@ class HisenseE7NConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._client: HisenseTvClient | None = None
-        self._data: dict[str, Any] = {}
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
@@ -113,13 +112,17 @@ class HisenseE7NConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 cert_pairs=cert_pairs,
                 loop=self.hass.loop,
             )
+            self._client = client
             try:
                 await client.async_connect()
             except ConnectionError as err:
                 errors["base"] = classify_connect_error(str(err))
             else:
-                self._client = client
-                self._data = {
+                try:
+                    await client.async_pair()
+                except Exception:  # noqa: BLE001 — announce is best-effort; MQTT already succeeded
+                    pass
+                data = {
                     CONF_HOST: host,
                     CONF_PORT: port,
                     CONF_MAC: (user_input.get(CONF_MAC) or "").strip(),
@@ -134,46 +137,17 @@ class HisenseE7NConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_CLIENT_KEY: client.keyfile or primary_key,
                     CONF_USE_SSL: True if client.use_ssl is None else client.use_ssl,
                 }
-                await client.async_pair()
-                return await self.async_step_pin()
+                await client.async_disconnect()
+                self._client = None
+                return self.async_create_entry(
+                    title=data.get(CONF_NAME) or DEFAULT_NAME,
+                    data=data,
+                )
 
         return self.async_show_form(
             step_id="user",
             data_schema=STEP_USER_DATA,
             errors=errors,
-        )
-
-    async def async_step_pin(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        errors: dict[str, str] = {}
-        client = self._client
-        if client is None:
-            return self.async_abort(reason="cannot_connect")
-
-        if user_input is not None:
-            pin = (user_input.get("pin") or "").strip()
-            if pin:
-                try:
-                    await client.async_submit_pin(pin)
-                except TimeoutError:
-                    errors["base"] = "invalid_pin"
-            if not errors:
-                await client.async_disconnect()
-                return self.async_create_entry(
-                    title=self._data.get(CONF_NAME) or DEFAULT_NAME,
-                    data=self._data,
-                )
-
-        already = client.state.already_paired and not client.state.needs_pin
-        hint = (
-            "No PIN dialog was reported; submit with an empty PIN if the TV did not pop up a code."
-            if already
-            else "Enter the 4-digit code shown on the TV."
-        )
-        return self.async_show_form(
-            step_id="pin",
-            data_schema=vol.Schema({vol.Optional("pin"): str}),
-            errors=errors,
-            description_placeholders={"hint": hint},
         )
 
     def async_remove(self) -> None:

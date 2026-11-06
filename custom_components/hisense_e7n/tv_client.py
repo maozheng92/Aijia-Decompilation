@@ -550,6 +550,7 @@ class HisenseTvClient:
         self._publish(topics.getvolume(creds), "")
 
     def start_pairing(self) -> None:
+        """Announce this client. 爱家 / E7N Pro does not use an on-screen PIN."""
         creds = self._require_creds()
         self._publish(
             topics.login_each_other_info(creds),
@@ -564,34 +565,10 @@ class HisenseTvClient:
         )
         self._publish(topics.vidaa_app_connect(creds), CONNECT_PAYLOAD)
 
-    def submit_pin(self, pin: str) -> None:
-        creds = self._require_creds()
-        self._publish(topics.authenticationcode(creds), {"authNum": str(pin).strip()})
-
-    async def async_pair(self, pin_timeout: float = 8.0) -> TvState:
-        """Trigger the on-screen PIN (or detect an already-paired UUID)."""
+    async def async_pair(self) -> TvState:
+        """Register with the TV without waiting for a PIN."""
         loop = asyncio.get_running_loop()
-        self._pin_event = asyncio.Event()
         await loop.run_in_executor(None, self.start_pairing)
-        try:
-            await asyncio.wait_for(self._pin_event.wait(), timeout=pin_timeout)
-        except TimeoutError:
-            # No PIN push — try a volume probe; success means already authorized.
-            try:
-                await loop.run_in_executor(None, self.refresh_status)
-                await asyncio.sleep(1.2)
-            except Exception:  # noqa: BLE001
-                _LOGGER.debug("Status probe after pairing timeout failed", exc_info=True)
-        return self.state
-
-    async def async_submit_pin(self, pin: str, timeout: float = 15.0) -> TvState:
-        loop = asyncio.get_running_loop()
-        self._token_event = asyncio.Event()
-        await loop.run_in_executor(None, self.submit_pin, pin)
-        try:
-            await asyncio.wait_for(self._token_event.wait(), timeout=timeout)
-        except TimeoutError as err:
-            raise TimeoutError("PIN not accepted") from err
         return self.state
 
     async def async_send_key(self, key: str) -> None:

@@ -22,7 +22,7 @@ payload: KEY_POWER
 是同一套键值。E7N Pro（以及同代 E7N / E7NQ Pro）固件在 2024 之后通常还要：
 
 1. **动态 MQTT 用户名/密码**（由客户端 UUID + 时间戳算出，旧账号 `hisenseservice` / `multimqttservice` 会 rc=5）
-2. **屏幕 4 位 PIN 配对**（一次）
+2. **爱家手机配对不需要 PIN**，MQTT 连通即可
 3. TLS 上的客户端证书（很多机器只检查「有证书」；严格固件才要官方 VIDAA/爱家证书）
 
 `<client_id>` 必须是动态算法生成的那个，不能写死 `HomeAssistant`，否则按键会被静默丢掉。
@@ -33,7 +33,7 @@ payload: KEY_POWER
 
 - `media_player`：开关、音量、静音、输入源、播放/暂停；**关机后开机调用配置的 button 设备**（`button.press` / `switch.turn_on` / `script.turn_on`），不指望爱家 `KEY_POWER`
 - `remote`：发送 `KEY_*`（可用 Universal Remote Card）；关机状态下的电源键同样走 button
-- 配置流：IP → 连接 → PIN；可选绑定开机按钮
+- 配置流：IP → 连接（无 PIN）；可选绑定开机按钮
 - `iot_class: local_push`，不经过海信云
 
 ## 安装
@@ -42,7 +42,7 @@ payload: KEY_POWER
 2. 重启 Home Assistant。
 3. **设置 → 设备与服务 → 添加集成 → Hisense E7N Pro**。
 4. 电视保持开机，填 IP。**开机按钮**选一个能物理打开电视的实体（红外开机键、智能插座、辅助按钮、脚本）。爱家 App 无法开机，集成不会再靠 MQTT `KEY_POWER` 唤醒关机的电视。
-5. 电视弹出 PIN 就输入；没弹窗则 PIN 留空提交。
+5. 爱家配对不需要 PIN，MQTT 连上后直接完成添加。
 6. 已添加的集成可在选项里补选或更换开机按钮。
 
 HACS：把本仓库加为自定义仓库（类别 Integration）。

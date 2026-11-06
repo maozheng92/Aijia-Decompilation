@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "海信 E7N Pro",
-        "description": "配对时电视需已开机。默认端口 36669（VIDAA 机内 MQTT / TLS）。爱家无法唤醒已关机的电视，请选择一个真正能开机的 Button 设备。",
+        "description": "电视需已开机。默认端口 36669（VIDAA 机内 MQTT / TLS）。爱家手机配对不需要 PIN，连上 MQTT 即可。请选择一个真正能开机的 Button 设备。",
         "data": {
           "host": "电视 IP",
           "port": "MQTT 端口",
@@ -21,21 +21,13 @@
           "auth_mode": "auto 会先试新固件动态凭证，再回退旧固件静态账号。",
           "client_cert": "留空则使用生成的占位证书。若 MQTT 返回 rc=5，请按文档放入爱家/VIDAA 客户端证书。"
         }
-      },
-      "pin": {
-        "title": "与电视配对",
-        "description": "电视弹出 4 位 PIN 时填入。若没有弹窗，说明此客户端已授权，PIN 留空直接提交即可。\n\n{hint}",
-        "data": {
-          "pin": "PIN"
-        }
       }
     },
     "error": {
       "cannot_connect": "连不上电视的 MQTT 端口（默认 36669）。请确认电视已完全开机（不是待机）、填的是电视局域网 IP、Home Assistant 与电视同一网段，并且已打开「手机遥控 / 网络控制」。",
       "timeout": "36669 端口能通，但电视没有完成 MQTT 握手。请等电视完全进入桌面后再添加。",
       "tls_failed": "已连上 36669，但 TLS 握手失败。集成会自动使用旧加密套件和爱家里的客户端证书，请重启电视后再试。若仍失败，部分固件是明文 MQTT，认证模式保持 auto 即可。",
-      "not_authorized": "MQTT 已接通，但账号被拒绝（rc=5）。请保持认证模式 auto，并把电视时间/时区设正确后重试。新固件用动态凭证，旧固件用 hisenseservice。",
-      "invalid_pin": "PIN 未被接受。请在屏幕倒计时结束前重试。"
+      "not_authorized": "MQTT 已接通，但账号被拒绝（rc=5）。请保持认证模式 auto，并把电视时间/时区设正确后重试。新固件用动态凭证，旧固件用 hisenseservice。"
     },
     "abort": {
       "already_configured": "这台电视已经添加过了。",

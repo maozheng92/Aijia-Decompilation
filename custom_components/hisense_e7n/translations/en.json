@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Hisense E7N Pro",
-        "description": "The TV must be on for pairing. Default broker port is 36669 (VIDAA MQTT over TLS). Aijia cannot wake a fully off TV — pick a button device that actually powers it on.",
+        "description": "The TV must be on. Default broker port is 36669 (VIDAA MQTT over TLS). 爱家 pairing does not use a PIN — MQTT connect is enough. Pick a button device to turn the TV on; Aijia cannot wake a fully off set.",
         "data": {
           "host": "TV IP address",
           "port": "MQTT port",
@@ -21,21 +21,13 @@
           "auth_mode": "auto tries modern VIDAA credentials first, then legacy static login.",
           "client_cert": "Leave empty to use a generated stand-in cert. If MQTT rc=5, extract the VIDAA/爱家 client cert (see docs)."
         }
-      },
-      "pin": {
-        "title": "Pair with the TV",
-        "description": "If the TV shows a 4-digit PIN, enter it. If nothing appeared, the UUID is already authorized — leave the field empty and submit.\n\nHint: {hint}",
-        "data": {
-          "pin": "PIN"
-        }
       }
     },
     "error": {
       "cannot_connect": "Could not reach the TV MQTT port (default 36669). Confirm the TV is fully on (not standby), the IP is the TV's LAN address, Home Assistant is on the same network, and phone remote / network control is enabled.",
       "timeout": "The TV accepted TCP on 36669 but did not complete MQTT. Wait until the TV has finished booting, then try again.",
       "tls_failed": "Reached port 36669 but the TLS handshake failed. The integration now uses legacy ciphers and the 爱家 client certificate automatically — retry after a TV reboot. If it still fails, the TV may be serving plain MQTT; keep auth mode on auto.",
-      "not_authorized": "MQTT connected but the TV rejected the login (rc=5). Keep auth mode on auto, set the TV clock/timezone correctly, and retry. Newer VIDAA firmware needs dynamic credentials; older firmware uses hisenseservice.",
-      "invalid_pin": "The PIN was not accepted. Try again before the on-screen dialog times out."
+      "not_authorized": "MQTT connected but the TV rejected the login (rc=5). Keep auth mode on auto, set the TV clock/timezone correctly, and retry. Newer VIDAA firmware needs dynamic credentials; older firmware uses hisenseservice."
     },
     "abort": {
       "already_configured": "This TV is already configured.",

@@ -225,7 +225,7 @@ startDiscoverDlnaTv
 
 ## 7. E7N Pro 该用哪一层
 
-E7N Pro 是 VIDAA 机。Home Assistant 应直连电视 **MQTT `:36669`**（`sendkey` 的 `KEY_*` 与本文第 3 节完全一致），用动态凭证 + PIN 配对。实现见 `custom_components/hisense_e7n` 与 [e7n-pro-homeassistant.md](e7n-pro-homeassistant.md)。
+E7N Pro 是 VIDAA 机。Home Assistant 应直连电视 **MQTT `:36669`**（`sendkey` 的 `KEY_*` 与本文第 3 节完全一致），用动态凭证。爱家手机配对不需要 PIN。实现见 `custom_components/hisense_e7n` 与 [e7n-pro-homeassistant.md](e7n-pro-homeassistant.md)。
 
 **开机例外：** 爱家无法唤醒已完全关机的电视（机内 MQTT 不在线，`KEY_POWER` 发不出去）。HA 集成在电视离线时改为调用用户配置的 **button 设备**（红外电源键、智能插座、脚本），而不是走爱家。
 
