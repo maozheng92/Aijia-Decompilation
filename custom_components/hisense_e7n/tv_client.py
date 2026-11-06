@@ -33,7 +33,7 @@ from .credentials import (
     credentials_for_mode,
     normalize_uuid,
 )
-from .keys import KEY_POWER, normalize_key
+from .keys import KEY_POWER, KEY_SOURCE, normalize_key
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -380,7 +380,7 @@ class HisenseTvClient:
             body = json.dumps(payload, separators=(",", ":"))
         else:
             body = str(payload)
-        info = self._client.publish(topic, body, qos=0, retain=False)
+        info = self._client.publish(topic, body, qos=1, retain=False)
         _LOGGER.debug("MQTT %s -> %s", topic, body)
         if info.rc != mqtt.MQTT_ERR_SUCCESS:
             raise RuntimeError(f"Publish failed rc={info.rc} topic={topic}")
@@ -573,7 +573,32 @@ class HisenseTvClient:
             raise last_error
 
     def send_key(self, key: str) -> None:
+        kind = key.strip().lower()
+        if kind in {"screenshot", "capture", "capturescreen"}:
+            self.capture_screenshot()
+            return
+        if kind in {"smart_image", "smartimage", "ai"}:
+            self.push_smart_image()
+            return
+        if kind in {"source", "signal"}:
+            self.open_source()
+            return
         self._publish_action("remote_service", "sendkey", key, as_key=True)
+
+    def capture_screenshot(self) -> None:
+        """爱家 截屏: captureTvScreen / getTvScreenInfo."""
+        for action in ("captureTvScreen", "getTvScreenInfo", "gettvpic", "screenshot"):
+            self._publish_action("ui_service", action, "")
+
+    def open_source(self) -> None:
+        """爱家 信号源: refresh sourcelist and send the VIDAA source key."""
+        self._publish_action("ui_service", "sourcelist", "")
+        self._publish_action("remote_service", "sendkey", KEY_SOURCE, as_key=True)
+
+    def push_smart_image(self) -> None:
+        """爱家 AI识图: pushSmartImage / functionSmartImage."""
+        for action in ("smartimage", "pushSmartImage", "functionSmartImage"):
+            self._publish_action("ui_service", action, "")
 
     def set_volume(self, volume: int) -> None:
         volume = max(0, min(100, int(volume)))
@@ -623,6 +648,15 @@ class HisenseTvClient:
 
     async def async_send_key(self, key: str) -> None:
         await asyncio.get_running_loop().run_in_executor(None, self.send_key, key)
+
+    async def async_capture_screenshot(self) -> None:
+        await asyncio.get_running_loop().run_in_executor(None, self.capture_screenshot)
+
+    async def async_open_source(self) -> None:
+        await asyncio.get_running_loop().run_in_executor(None, self.open_source)
+
+    async def async_push_smart_image(self) -> None:
+        await asyncio.get_running_loop().run_in_executor(None, self.push_smart_image)
 
     async def async_set_volume(self, volume: int) -> None:
         await asyncio.get_running_loop().run_in_executor(None, self.set_volume, volume)

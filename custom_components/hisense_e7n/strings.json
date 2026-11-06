@@ -62,6 +62,24 @@
       "remote": {
         "name": "Remote"
       }
+    },
+    "button": {
+      "power": {"name": "Power"},
+      "volume_down": {"name": "Volume down"},
+      "mute": {"name": "Mute"},
+      "volume_up": {"name": "Volume up"},
+      "screenshot": {"name": "Screenshot"},
+      "source": {"name": "Source"},
+      "smart_image": {"name": "AI image"},
+      "settings": {"name": "Settings"},
+      "up": {"name": "Up"},
+      "left": {"name": "Left"},
+      "ok": {"name": "OK"},
+      "right": {"name": "Right"},
+      "down": {"name": "Down"},
+      "back": {"name": "Back"},
+      "home": {"name": "Home"},
+      "menu": {"name": "Menu"}
     }
   }
 }

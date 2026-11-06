@@ -9,6 +9,35 @@ def test_key_aliases_match_aijia(proto_keys) -> None:
     assert proto_keys.normalize_key("ok") == "KEY_OK"
     assert proto_keys.normalize_key("jubao") == "KEY_JUBAO"
     assert proto_keys.normalize_key("returns") == "KEY_RETURNS"
+    assert proto_keys.normalize_key("settings") == proto_keys.KEY_CONTROL_CENTER
+    assert proto_keys.normalize_key("screenshot") == "screenshot"
+
+
+def test_aijia_remoter_has_screenshot_keys(proto_keys) -> None:
+    slugs = [item.slug for item in proto_keys.AIJIA_REMOTER_BUTTONS]
+    assert slugs == [
+        "power",
+        "volume_down",
+        "mute",
+        "volume_up",
+        "screenshot",
+        "source",
+        "smart_image",
+        "settings",
+        "up",
+        "left",
+        "ok",
+        "right",
+        "down",
+        "back",
+        "home",
+        "menu",
+    ]
+    commands = proto_keys.aijia_send_commands()
+    assert "KEY_HOME" in commands
+    assert "KEY_CONTROL_CENTER" in commands
+    assert "screenshot" in commands
+    assert "smart_image" in commands
 
 
 def test_sendkey_topic_uses_client_id(proto_credentials, proto_topics) -> None:
@@ -97,6 +126,11 @@ def test_send_key_publishes_raw_and_json_on_mac_topics(proto_client, proto_crede
     assert any(topic.endswith("/aa:bb:cc:dd:ee:ff$normal/actions/sendkey") for topic in topics)
     assert "KEY_HOME" in payloads
     assert '{"key":"KEY_HOME"}' in payloads
+    published.clear()
+    client.send_key("screenshot")
+    shot_topics = [topic for topic, _ in published]
+    assert any(topic.endswith("/actions/captureTvScreen") for topic in shot_topics)
+    assert any(topic.endswith("/actions/getTvScreenInfo") for topic in shot_topics)
 
 
 def test_wol_packet_shape(proto_client, monkeypatch) -> None:

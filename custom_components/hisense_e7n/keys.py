@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 # Names recovered from com.hisense.ms.fly2tv (libapp.so) plus the
 # public VIDAA sendkey set used on E7N Pro.
 KEY_POWER = "KEY_POWER"
@@ -73,7 +75,57 @@ ALIASES: dict[str, str] = {
     "source": KEY_SOURCE,
     "netflix": KEY_NETFLIX,
     "youtube": KEY_YOUTUBE,
+    "settings": KEY_CONTROL_CENTER,
+    "controlcenter": KEY_CONTROL_CENTER,
+    "screenshot": "screenshot",
+    "smart_image": "smart_image",
+    "ai": "smart_image",
 }
+
+
+@dataclass(frozen=True)
+class RemoterButton:
+    """One control on the 爱家 ``control_page_tv`` remoter."""
+
+    slug: str
+    translation_key: str
+    icon: str
+    kind: str
+    payload: str | None = None
+
+
+# Layout matches 海信爱家 电视遥控页 (control_page_tv_buttons.dart):
+# 电源 / 音量- 静音 音量+ / 截屏 / 信号源 / AI识图 / 设置 / 方向键 OK / 返回 首页 菜单
+# 「切换遥控模式」和底部语音是 App 内能力，不作为电视按键。
+AIJIA_REMOTER_BUTTONS: tuple[RemoterButton, ...] = (
+    RemoterButton("power", "power", "mdi:power", "power", KEY_POWER),
+    RemoterButton("volume_down", "volume_down", "mdi:minus", "key", KEY_VOLUMEDOWN),
+    RemoterButton("mute", "mute", "mdi:volume-mute", "key", KEY_MUTE),
+    RemoterButton("volume_up", "volume_up", "mdi:plus", "key", KEY_VOLUMEUP),
+    RemoterButton("screenshot", "screenshot", "mdi:monitor-screenshot", "screenshot"),
+    RemoterButton("source", "source", "mdi:import", "source", KEY_SOURCE),
+    RemoterButton("smart_image", "smart_image", "mdi:image-search-outline", "smart_image"),
+    RemoterButton("settings", "settings", "mdi:cog-outline", "key", KEY_CONTROL_CENTER),
+    RemoterButton("up", "up", "mdi:chevron-up", "key", KEY_UP),
+    RemoterButton("left", "left", "mdi:chevron-left", "key", KEY_LEFT),
+    RemoterButton("ok", "ok", "mdi:circle-outline", "key", KEY_OK),
+    RemoterButton("right", "right", "mdi:chevron-right", "key", KEY_RIGHT),
+    RemoterButton("down", "down", "mdi:chevron-down", "key", KEY_DOWN),
+    RemoterButton("back", "back", "mdi:arrow-u-left-top", "key", KEY_RETURNS),
+    RemoterButton("home", "home", "mdi:home-outline", "key", KEY_HOME),
+    RemoterButton("menu", "menu", "mdi:menu", "key", KEY_MENU),
+)
+
+
+def aijia_send_commands() -> list[str]:
+    """Commands ``remote.send_command`` accepts, in 爱家 keypad order."""
+    commands: list[str] = []
+    for item in AIJIA_REMOTER_BUTTONS:
+        if item.payload:
+            commands.append(item.payload)
+        elif item.kind in {"screenshot", "smart_image"}:
+            commands.append(item.kind)
+    return commands
 
 
 def normalize_key(key: str) -> str:
