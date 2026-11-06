@@ -31,7 +31,10 @@
       }
     },
     "error": {
-      "cannot_connect": "Could not connect to the TV MQTT broker on port 36669. Confirm the TV is on, the IP is correct, and phone remote control is enabled.",
+      "cannot_connect": "Could not reach the TV MQTT port (default 36669). Confirm the TV is fully on (not standby), the IP is the TV's LAN address, Home Assistant is on the same network, and phone remote / network control is enabled.",
+      "timeout": "The TV accepted TCP on 36669 but did not complete MQTT. Wait until the TV has finished booting, then try again.",
+      "tls_failed": "Reached port 36669 but the TLS handshake failed. The integration now uses legacy ciphers and the 爱家 client certificate automatically — retry after a TV reboot. If it still fails, the TV may be serving plain MQTT; keep auth mode on auto.",
+      "not_authorized": "MQTT connected but the TV rejected the login (rc=5). Keep auth mode on auto, set the TV clock/timezone correctly, and retry. Newer VIDAA firmware needs dynamic credentials; older firmware uses hisenseservice.",
       "invalid_pin": "The PIN was not accepted. Try again before the on-screen dialog times out."
     },
     "abort": {

@@ -25,7 +25,7 @@ from homeassistant.helpers.selector import (
     TextSelectorConfig,
 )
 
-from .certs_util import ensure_cert_pair
+from .certs_util import resolve_cert_candidates
 from .const import (
     AUTH_MODES,
     CONF_AUTH_MODE,
@@ -33,6 +33,7 @@ from .const import (
     CONF_CLIENT_KEY,
     CONF_CLIENT_UUID,
     CONF_POWER_ON_BUTTON,
+    CONF_USE_SSL,
     DEFAULT_AUTH_MODE,
     DEFAULT_NAME,
     DEFAULT_PORT,
@@ -40,7 +41,7 @@ from .const import (
 )
 from .credentials import random_client_uuid
 from .power import POWER_ON_DOMAINS, normalize_power_on_entity
-from .tv_client import HisenseTvClient
+from .tv_client import HisenseTvClient, classify_connect_error
 
 POWER_ON_BUTTON_SELECTOR = EntitySelector(
     EntitySelectorConfig(domain=list(POWER_ON_DOMAINS), multiple=False)
@@ -84,11 +85,19 @@ class HisenseE7NConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             uuid = random_client_uuid()
             certfile = (user_input.get(CONF_CLIENT_CERT) or "").strip() or None
             keyfile = (user_input.get(CONF_CLIENT_KEY) or "").strip() or None
-            if not certfile or not keyfile:
-                cert_dir = Path(self.hass.config.config_dir) / "hisense_e7n" / "setup"
-                certfile, keyfile = await self.hass.async_add_executor_job(
-                    ensure_cert_pair, cert_dir
-                )
+            cert_dir = Path(self.hass.config.config_dir) / "hisense_e7n" / "setup"
+            search_roots = [
+                Path(self.hass.config.config_dir),
+                Path(__file__).resolve().parents[2],
+            ]
+            cert_pairs = await self.hass.async_add_executor_job(
+                resolve_cert_candidates,
+                cert_dir,
+                certfile,
+                keyfile,
+                search_roots,
+            )
+            primary_cert, primary_key = cert_pairs[0] if cert_pairs else (certfile, keyfile)
 
             await self.async_set_unique_id(host.lower())
             self._abort_if_unique_id_configured()
@@ -99,14 +108,15 @@ class HisenseE7NConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 uuid=uuid,
                 tv_mac=(user_input.get(CONF_MAC) or "").strip() or None,
                 auth_mode=user_input.get(CONF_AUTH_MODE, DEFAULT_AUTH_MODE),
-                certfile=certfile,
-                keyfile=keyfile,
+                certfile=primary_cert,
+                keyfile=primary_key,
+                cert_pairs=cert_pairs,
                 loop=self.hass.loop,
             )
             try:
                 await client.async_connect()
-            except ConnectionError:
-                errors["base"] = "cannot_connect"
+            except ConnectionError as err:
+                errors["base"] = classify_connect_error(str(err))
             else:
                 self._client = client
                 self._data = {
@@ -120,8 +130,9 @@ class HisenseE7NConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_NAME: user_input.get(CONF_NAME) or DEFAULT_NAME,
                     CONF_AUTH_MODE: user_input.get(CONF_AUTH_MODE, DEFAULT_AUTH_MODE),
                     CONF_CLIENT_UUID: uuid,
-                    CONF_CLIENT_CERT: certfile,
-                    CONF_CLIENT_KEY: keyfile,
+                    CONF_CLIENT_CERT: client.certfile or primary_cert,
+                    CONF_CLIENT_KEY: client.keyfile or primary_key,
+                    CONF_USE_SSL: True if client.use_ssl is None else client.use_ssl,
                 }
                 await client.async_pair()
                 return await self.async_step_pin()

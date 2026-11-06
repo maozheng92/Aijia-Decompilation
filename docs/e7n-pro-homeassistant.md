@@ -76,12 +76,26 @@ data:
 
 爱家里出现过的键：`KEY_POWER`、`KEY_VOLUMEUP`、`KEY_VOLUMEDOWN`、`KEY_MUTE`、`KEY_UP`/`DOWN`/`LEFT`/`RIGHT`、`KEY_OK`、`KEY_RETURNS`、`KEY_HOME`、`KEY_MENU`、`KEY_MULTITASK`、`KEY_CONTROL_CENTER`、`KEY_BRIGHTUP`/`KEY_BRIGHTDOWN`、`KEY_JUBAO`。别名如 `home`、`ok`、`mute` 也可以。
 
-## MQTT rc=5 时
+## 添加集成时报「无法连接 36669」
 
-1. 确认电视已开机，时间/时区正确（动态密码含时间戳）。
-2. 认证模式保持 `auto`。
-3. 运行 `python3 scripts/extract_vidaa_certs.py`，若成功解出证书，在配置流里填 PEM 路径。
-4. 仍失败时，从官方 VIDAA / RemoteNOW 客户端放入 `CN=VidaaAppAndroidV01` 的证书对。不要把私钥提交到 git。
+集成会先探测 TCP，再按顺序试：**爱家客户端证书 + TLS（旧加密套件）→ 自签 VIDAA 证书 → 无客户端证书 → 明文 MQTT**。请先更新本仓库后再重新添加。
+
+仍失败时对照报错：
+
+| 提示 | 含义 | 处理 |
+|---|---|---|
+| 连不上 MQTT 端口 | IP/防火墙/电视未开 | 电视进桌面（不要待机），填电视自己的局域网 IP，HA 与电视同一二层网，打开「手机遥控/网络控制」 |
+| 已通端口但没完成 MQTT | 开机未完成 | 等 30 秒后再添加 |
+| TLS 握手失败 | 旧 Mosquitto / 缺证书 | 把 `com.hisense.ms.fly2tv.apk` 放到 HA 的 `config/` 目录（集成会解开 `res/6D.p12`），或运行下面的脚本 |
+| rc=5 认证被拒 | 用户名密码不对 | 认证模式 `auto`，电视时间/时区正确 |
+
+解证书（私钥不要提交 git）：
+
+```bash
+python3 scripts/extract_vidaa_certs.py
+```
+
+把生成的 `client.pem` / `client.key` 拷到 Home Assistant 的 `config/hisense_e7n/setup/`，或在添加集成时填写路径。
 
 ## 开机为什么不用爱家
 

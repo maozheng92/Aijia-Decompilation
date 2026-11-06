@@ -10,13 +10,14 @@ from homeassistant.const import CONF_HOST, CONF_MAC, CONF_NAME, CONF_PORT, Platf
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 
-from .certs_util import ensure_cert_pair
+from .certs_util import resolve_cert_candidates
 from .const import (
     CONF_AUTH_MODE,
     CONF_CLIENT_CERT,
     CONF_CLIENT_KEY,
     CONF_CLIENT_UUID,
     CONF_POWER_ON_BUTTON,
+    CONF_USE_SSL,
     DATA_CLIENT,
     DATA_COORDINATOR,
     DEFAULT_AUTH_MODE,
@@ -43,10 +44,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     uuid = data.get(CONF_CLIENT_UUID) or random_client_uuid()
     certfile = data.get(CONF_CLIENT_CERT)
     keyfile = data.get(CONF_CLIENT_KEY)
-
-    if not certfile or not keyfile:
-        cert_dir = Path(hass.config.config_dir) / "hisense_e7n" / entry.entry_id
-        certfile, keyfile = await hass.async_add_executor_job(ensure_cert_pair, cert_dir)
+    cert_dir = Path(hass.config.config_dir) / "hisense_e7n" / entry.entry_id
+    search_roots = [Path(hass.config.config_dir), Path(__file__).resolve().parents[2]]
+    cert_pairs = await hass.async_add_executor_job(
+        resolve_cert_candidates,
+        cert_dir,
+        certfile,
+        keyfile,
+        search_roots,
+    )
+    if cert_pairs:
+        certfile, keyfile = cert_pairs[0]
+    use_ssl = data.get(CONF_USE_SSL)
+    if isinstance(use_ssl, str):
+        use_ssl = use_ssl.lower() in {"1", "true", "yes"}
 
     power_on_button = normalize_power_on_entity(data.get(CONF_POWER_ON_BUTTON))
     client = HisenseTvClient(
@@ -57,6 +68,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         auth_mode=data.get(CONF_AUTH_MODE, DEFAULT_AUTH_MODE),
         certfile=certfile,
         keyfile=keyfile,
+        cert_pairs=cert_pairs,
+        use_ssl=use_ssl,
         loop=hass.loop,
     )
 

@@ -20,8 +20,20 @@ import paho.mqtt.client as mqtt
 
 from . import topics
 from .certs_util import build_ssl_context
-from .const import DEFAULT_PORT, MQTT_KEEPALIVE
-from .credentials import MqttCredentials, credentials_for_mode, normalize_uuid
+from .const import (
+    DEFAULT_PORT,
+    MQTT_CONNACK_WAIT,
+    MQTT_CONNECT_TIMEOUT,
+    MQTT_KEEPALIVE,
+    RC_TCP_FAILED,
+    RC_TLS_FAILED,
+)
+from .credentials import (
+    MqttCredentials,
+    credentials_for_mode,
+    generate_static_credentials,
+    normalize_uuid,
+)
 from .keys import KEY_POWER, normalize_key
 
 _LOGGER = logging.getLogger(__name__)
@@ -68,6 +80,33 @@ def _rc_value(reason_code: Any) -> int:
         return int(reason_code)
     except (TypeError, ValueError):
         return -1
+
+
+def classify_connect_error(message: str) -> str:
+    """Map ConnectionError text to a config-flow error key."""
+    text = (message or "").lower()
+    if "mqtt_rc_5" in text or "not_authorized" in text:
+        return "not_authorized"
+    if "mqtt_rc_99" in text or "tls" in text:
+        return "tls_failed"
+    if "tcp_timeout" in text or "timed out" in text or "mqtt_rc_-1" in text:
+        return "timeout"
+    if "tcp_refused" in text or "connection refused" in text:
+        return "cannot_connect"
+    return "cannot_connect"
+
+
+def probe_tcp(host: str, port: int, timeout: float = MQTT_CONNECT_TIMEOUT) -> None:
+    """Fail fast if 36669 is not reachable before starting MQTT/TLS."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return
+    except TimeoutError as err:
+        raise ConnectionError("tcp_timeout") from err
+    except ConnectionRefusedError as err:
+        raise ConnectionError("tcp_refused") from err
+    except OSError as err:
+        raise ConnectionError(f"tcp_failed:{err}") from err
 
 
 def send_wol(mac: str, broadcast: str = "255.255.255.255", port: int = 9) -> None:
@@ -125,6 +164,8 @@ class HisenseTvClient:
         auth_mode: str = "auto",
         certfile: str | None = None,
         keyfile: str | None = None,
+        cert_pairs: list[tuple[str | None, str | None]] | None = None,
+        use_ssl: bool | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         self.host = host
@@ -134,6 +175,9 @@ class HisenseTvClient:
         self.auth_mode = auth_mode
         self.certfile = certfile
         self.keyfile = keyfile
+        self.cert_pairs = cert_pairs or ([(certfile, keyfile)] if certfile and keyfile else [(None, None)])
+        self.use_ssl = use_ssl
+        self.transport: str | None = None
         self._loop = loop
         self.state = TvState()
         self._listeners: list[Callable[[TvState], None]] = []
@@ -323,54 +367,122 @@ class HisenseTvClient:
         if info.rc != mqtt.MQTT_ERR_SUCCESS:
             raise RuntimeError(f"Publish failed rc={info.rc} topic={topic}")
 
-    def _try_connect(self, creds: MqttCredentials) -> int:
+    def _stop_client(self) -> None:
+        client = self._client
+        self._client = None
+        if client is None:
+            return
+        try:
+            client.loop_stop()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            client.disconnect()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _try_connect(
+        self,
+        creds: MqttCredentials,
+        *,
+        use_tls: bool,
+        certfile: str | None,
+        keyfile: str | None,
+    ) -> int:
         self._creds = creds
         client = _paho_client(creds.client_id)
         client.username_pw_set(creds.username, creds.password)
         client.on_connect = self._on_connect
         client.on_disconnect = self._on_disconnect
         client.on_message = self._on_message
-        context = build_ssl_context(self.certfile, self.keyfile)
-        client.tls_set_context(context)
-        client.tls_insecure_set(True)
+        client._connect_timeout = MQTT_CONNECT_TIMEOUT  # noqa: SLF001 — paho 2.x
+        if use_tls:
+            context = build_ssl_context(certfile, keyfile)
+            client.tls_set_context(context)
+            # Do not call tls_insecure_set: it can rebuild the context and
+            # wipe SECLEVEL=0 / the client chain on some paho versions.
         self._client = client
         self._connect_rc = -1
         try:
             client.connect(self.host, self.port, keepalive=MQTT_KEEPALIVE)
         except ssl.SSLError as err:
-            _LOGGER.warning("TLS handshake failed: %s", err)
-            return 99
+            _LOGGER.warning("TLS handshake failed (%s cert=%s): %s", creds.mode, certfile, err)
+            self._stop_client()
+            return RC_TLS_FAILED
+        except TimeoutError as err:
+            _LOGGER.warning("MQTT TCP timed out: %s", err)
+            self._stop_client()
+            return RC_TCP_FAILED
         except OSError as err:
             _LOGGER.warning("TCP connect failed: %s", err)
-            return 98
+            self._stop_client()
+            return RC_TCP_FAILED
         client.loop_start()
-        # on_connect will set _connect_rc; wait briefly for CONNACK.
-        for _ in range(50):
+        steps = max(1, int(MQTT_CONNACK_WAIT / 0.1))
+        for _ in range(steps):
             if self._connect_rc != -1:
                 break
             threading.Event().wait(0.1)
         return self._connect_rc
 
+    def _credential_sets(self, use_tls: bool) -> list[MqttCredentials]:
+        if not use_tls:
+            return [generate_static_credentials(self.uuid)]
+        candidates = credentials_for_mode(self.auth_mode, self.uuid)
+        mac = (self.tv_mac or "").strip()
+        if mac:
+            try:
+                extra = credentials_for_mode(self.auth_mode, mac)
+            except ValueError:
+                extra = []
+            for creds in extra:
+                if all(creds.client_id != item.client_id for item in candidates):
+                    candidates.append(creds)
+        return candidates
+
+    def _transports(self) -> list[tuple[str, bool, str | None, str | None]]:
+        if self.use_ssl is False:
+            return [("plain", False, None, None)]
+        transports: list[tuple[str, bool, str | None, str | None]] = []
+        for certfile, keyfile in self.cert_pairs:
+            label = "tls" if certfile else "tls_anon"
+            transports.append((label, True, certfile, keyfile))
+        if not any(item[2] is None for item in transports):
+            transports.append(("tls_anon", True, None, None))
+        if self.use_ssl is not True:
+            transports.append(("plain", False, None, None))
+        return transports
+
     def connect_blocking(self) -> MqttCredentials:
-        """Try credential candidates until CONNECT is accepted."""
+        """Probe TCP, then try TLS (爱家 cert → stand-in → none) then plaintext."""
         self._stop.clear()
+        probe_tcp(self.host, self.port)
         last_error: str | None = None
-        for creds in credentials_for_mode(self.auth_mode, self.uuid):
-            _LOGGER.debug("Trying MQTT auth mode %s client_id=%s", creds.mode, creds.client_id)
-            if self._client is not None:
-                try:
-                    self._client.loop_stop()
-                    self._client.disconnect()
-                except Exception:  # noqa: BLE001
-                    pass
-                self._client = None
-            rc = self._try_connect(creds)
-            if rc == 0:
-                self.state.auth_mode = creds.mode
-                self.state.last_error = None
-                return creds
-            last_error = f"mqtt_rc_{rc}"
-            self.state.last_error = last_error
+        for name, use_tls, certfile, keyfile in self._transports():
+            for creds in self._credential_sets(use_tls):
+                _LOGGER.debug(
+                    "MQTT try transport=%s auth=%s client_id=%s cert=%s",
+                    name,
+                    creds.mode,
+                    creds.client_id,
+                    certfile,
+                )
+                self._stop_client()
+                rc = self._try_connect(creds, use_tls=use_tls, certfile=certfile, keyfile=keyfile)
+                if rc == 0:
+                    self.transport = name
+                    self.certfile = certfile
+                    self.keyfile = keyfile
+                    self.use_ssl = use_tls
+                    self.state.auth_mode = creds.mode
+                    self.state.last_error = None
+                    _LOGGER.info("MQTT connected via %s auth=%s", name, creds.mode)
+                    return creds
+                last_error = f"mqtt_rc_{rc}"
+                self.state.last_error = last_error
+                if rc in {RC_TCP_FAILED, RC_TLS_FAILED, -1}:
+                    # Same socket/TLS setup will fail for every password.
+                    break
         self.disconnect_blocking()
         raise ConnectionError(last_error or "cannot_connect")
 

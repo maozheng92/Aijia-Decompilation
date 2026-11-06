@@ -14,6 +14,7 @@ CONF_CLIENT_KEY = "client_key"
 CONF_ACCESS_TOKEN = "access_token"
 CONF_REFRESH_TOKEN = "refresh_token"
 CONF_POWER_ON_BUTTON = "power_on_button"
+CONF_USE_SSL = "use_ssl"
 
 AUTH_MODE_AUTO = "auto"
 AUTH_MODE_DYNAMIC = "dynamic"
@@ -23,6 +24,12 @@ AUTH_MODES = [AUTH_MODE_AUTO, AUTH_MODE_DYNAMIC, AUTH_MODE_STATIC]
 # VIDAA / RemoteNOW broker on the TV (same KEY_* vocabulary as 海信爱家).
 MQTT_KEEPALIVE = 30
 MQTT_PROTOCOL_NAME = "VIDAA MQTT"
+MQTT_CONNECT_TIMEOUT = 8.0
+MQTT_CONNACK_WAIT = 8.0
+
+# Internal connect results (not MQTT CONNACK codes).
+RC_TCP_FAILED = 98
+RC_TLS_FAILED = 99
 
 STATIC_MQTT_USERNAME = "hisenseservice"
 STATIC_MQTT_PASSWORD = "multimqttservice"
