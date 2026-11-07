@@ -192,7 +192,13 @@ class HisenseBleRemote:
         return bool(client is not None and getattr(client, "is_connected", False))
 
     async def async_connect(self) -> None:
-        from bleak import BleakClient
+        try:
+            from bleak import BleakClient
+        except ImportError as err:
+            raise RuntimeError(
+                "bleak is missing. Enable the Home Assistant Bluetooth integration, "
+                "which provides the bleak build pinned by this Core version."
+            ) from err
 
         target: Any = self.address
         try:
