@@ -6,7 +6,7 @@ to the concrete topics listed here.
 
 from __future__ import annotations
 
-from .credentials import MqttCredentials, normalize_uuid
+from .credentials import MqttCredentials
 
 
 def _tv_action(creds: MqttCredentials, service: str, action: str) -> str:
@@ -18,50 +18,16 @@ def _mobile_data(creds: MqttCredentials, service: str, data_type: str) -> str:
 
 
 def command_identities(creds: MqttCredentials, tv_mac: str | None = None) -> list[str]:
-    """MQTT topic identities the TV may actually listen on.
+    """Topic identity the broker actually routes.
 
-    Some firmware keys off the connected ``client_id``; older RemoteNOW /
-    爱家 builds ignore that and only accept ``{MAC}$vidaa_common`` or
-    ``{MAC}$normal``. Publishing to every plausible identity is cheap on
-    LAN and is why keys otherwise look like they "do nothing".
+    sendkey is delivered only to the ``client_id`` of this MQTT session
+    (``{uuid}$his${hash}_vidaacommon_001`` or the static ``$vidaa_common`` /
+    ``$normal`` id we connected with). The TV Wi-Fi MAC is not that id.
+    ``tv_mac`` is accepted so older callers keep working and is not used.
     """
-    identities: list[str] = []
-
-    def add(value: str | None) -> None:
-        if not value:
-            return
-        text = str(value).strip()
-        if text and text not in identities:
-            identities.append(text)
-
-    add(creds.client_id)
-    macs: list[str] = []
-    if creds.uuid:
-        macs.append(creds.uuid)
-    if tv_mac:
-        try:
-            cleaned = normalize_uuid(tv_mac)
-        except ValueError:
-            cleaned = tv_mac.strip().replace("-", ":").lower()
-        if cleaned and cleaned not in macs:
-            macs.append(cleaned)
-    for mac in macs:
-        compact = mac.replace(":", "")
-        add(mac)
-        add(mac.upper())
-        add(compact)
-        add(compact.upper())
-        add(f"{mac}$vidaa_common")
-        add(f"{mac}$vidaa_lite")
-        add(f"{mac}$normal")
-        add(f"{mac.upper()}$vidaa_common")
-        add(f"{mac.upper()}$normal")
-        add(f"{compact}$vidaa_common")
-        add(f"{compact}$normal")
-        add(f"{compact.upper()}$vidaa_common")
-        add(f"{compact.upper()}$normal")
-    add("HomeAssistant")
-    return identities
+    del tv_mac
+    client_id = (creds.client_id or "").strip()
+    return [client_id] if client_id else []
 
 
 def action_topics(
@@ -136,6 +102,7 @@ _MOBILE_DATA = (
 _BROADCASTS = (
     "/remoteapp/mobile/broadcast/ui_service/state",
     "/remoteapp/mobile/broadcast/platform_service/data/volumechange",
+    "/remoteapp/mobile/broadcast/platform_service/actions/volumechange",
     "/remoteapp/mobile/broadcast/platform_service/volume",
 )
 

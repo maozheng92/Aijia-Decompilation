@@ -53,22 +53,27 @@ def normalize_uuid(uuid: str) -> str:
     return ":".join(parts)
 
 
-def prefer_tv_mac_uuid(stored: str | None, tv_mac: str | None) -> str:
-    """Use the TV MAC as MQTT UUID when the user supplied one.
+def stable_client_uuid(stored: str | None, tv_mac: str | None = None) -> str:
+    """Return the persisted phone-style client id.
 
-    RemoteNOW / 爱家 topic identity is ``{MAC}$vidaa_common`` (or ``$normal``).
-    A random locally-administered UUID still connects, but sendkey is dropped.
+    VIDAA sendkey is authorized for this id, not for the TV Wi-Fi MAC.
+    A stored id that is just the TV MAC is discarded so keys are not published
+    as the television talking to itself.
     """
+    mac_norm = None
     if tv_mac:
         try:
-            return normalize_uuid(tv_mac)
+            mac_norm = normalize_uuid(tv_mac)
         except ValueError:
-            pass
+            mac_norm = None
     if stored:
         try:
-            return normalize_uuid(stored)
+            stored_norm = normalize_uuid(stored)
         except ValueError:
-            pass
+            stored_norm = None
+        else:
+            if stored_norm != mac_norm:
+                return stored_norm
     return random_client_uuid()
 
 

@@ -44,15 +44,14 @@ def test_static_credentials(proto_credentials) -> None:
     ).client_id == "aa:bb:cc:dd:ee:ff$normal"
 
 
-def test_prefer_tv_mac_uuid(proto_credentials) -> None:
+def test_stable_client_uuid_ignores_tv_mac(proto_credentials) -> None:
     assert (
-        proto_credentials.prefer_tv_mac_uuid("12:34:56:78:9a:bc", "AA-BB-CC-DD-EE-FF")
-        == "aa:bb:cc:dd:ee:ff"
-    )
-    assert (
-        proto_credentials.prefer_tv_mac_uuid("12:34:56:78:9a:bc", None)
+        proto_credentials.stable_client_uuid("12:34:56:78:9a:bc", "AA-BB-CC-DD-EE-FF")
         == "12:34:56:78:9a:bc"
     )
+    minted = proto_credentials.stable_client_uuid("aa:bb:cc:dd:ee:ff", "AA-BB-CC-DD-EE-FF")
+    assert minted != "aa:bb:cc:dd:ee:ff"
+    assert len(minted.split(":")) == 6
 
 
 def test_auto_mode_includes_mac_shaped_static(proto_credentials) -> None:

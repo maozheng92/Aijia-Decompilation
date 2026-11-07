@@ -225,15 +225,9 @@ startDiscoverDlnaTv
 
 ## 7. E7N Pro 该用哪一层
 
-E7N Pro 是 VIDAA 机。爱家添加电视会提示打开蓝牙：`libapp.so` 里是 `flutter_blue_plus` + GATT
+E7N Pro 是 VIDAA 机。爱家添加家电会提示打开蓝牙（`flutter_blue_plus`），那不是电视遥控，电视菜单里也通常没有蓝牙 MAC。
 
-- service `3a69180b-0000-1000-8000-00805f587e61`
-- write `3a692a12-0000-1000-8000-00805f587e61`
-- notify `3a692a13-0000-1000-8000-00805f587e61`
-
-按键按 Hisense ERF6A40 HID 报告写到该特征（无此特征时再试标准 HID-over-GATT `1812` / `2a4d`）。HA 集成把这条当作发键主路径。
-
-机内 MQTT `:36669` 仍用于状态和截屏；它能 CONNACK 但丢弃未配对身份的 `sendkey`。爱家手机配对不需要 PIN，但要开蓝牙。实现见 `custom_components/hisense_e7n` 与 [e7n-pro-homeassistant.md](e7n-pro-homeassistant.md)。
+按键走机内 MQTT `:36669`。`sendkey` 的 topic 必须是本次连接的 client id，不能换成电视 Wi‑Fi MAC。爱家手机配对不需要 PIN；电视第一次授权这个客户端时，可能在屏幕上显示 4 位数字，用 `hisense_e7n.submit_code` 送回去。实现见 `custom_components/hisense_e7n` 与 [e7n-pro-homeassistant.md](e7n-pro-homeassistant.md)。
 
 **开机例外：** 爱家无法唤醒已完全关机的电视（机内 MQTT 不在线，`KEY_POWER` 发不出去）。HA 集成在电视离线时改为调用用户配置的 **button 设备**（红外电源键、智能插座、脚本），而不是走爱家。
 

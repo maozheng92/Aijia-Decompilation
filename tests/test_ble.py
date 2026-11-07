@@ -62,25 +62,36 @@ def test_hisense_advertisement_matches_vendor_uuid(proto_ble) -> None:
     assert not proto_ble.is_hisense_ble_advertisement("xiaomi band", [])
 
 
-def test_send_key_prefers_ble_and_skips_mqtt(proto_client) -> None:
+def test_send_key_still_uses_mqtt_when_ble_is_connected(proto_client, proto_credentials) -> None:
     client = proto_client.HisenseTvClient("127.0.0.1", uuid="aa:bb:cc:dd:ee:ff")
-    sent: list[str] = []
+    payloads: list[str] = []
 
     class FakeBle:
         connected = True
 
         async def async_send_key(self, key: str) -> bool:
-            sent.append(key)
-            return True
+            raise AssertionError("BLE must not replace MQTT")
+
+    class FakeMqtt:
+        def publish(self, topic, body, qos=0, retain=False):
+            payloads.append(body)
+
+            class Info:
+                rc = proto_client.mqtt.MQTT_ERR_SUCCESS
+
+                def wait_for_publish(self, timeout=None):
+                    return None
+
+            return Info()
 
     client.ble = FakeBle()
-
-    def boom(_key: str) -> None:
-        raise AssertionError("MQTT sendkey should not run when BLE succeeds")
-
-    client.send_key = boom  # type: ignore[method-assign]
+    client._creds = proto_credentials.generate_dynamic_credentials(
+        "aa:bb:cc:dd:ee:ff", timestamp=1
+    )
+    client._client = FakeMqtt()
+    client.state.already_paired = True
     asyncio.run(client.async_send_key("home"))
-    assert sent == ["home"]
+    assert "KEY_HOME" in payloads
 
 
 def test_send_key_falls_back_to_mqtt_when_ble_returns_false(

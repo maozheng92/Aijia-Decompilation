@@ -40,7 +40,7 @@ _LOGGER = logging.getLogger(__name__)
 CONNECT_PAYLOAD = {
     "app_version": 2,
     "connect_result": 0,
-    "device_type": "VIDAALiteMQTT",
+    "device_type": "Mobile App",
 }
 
 
@@ -576,6 +576,11 @@ class HisenseTvClient:
 
     def send_key(self, key: str) -> None:
         kind = key.strip().lower()
+        if not self.state.already_paired:
+            try:
+                self.start_pairing()
+            except Exception:  # noqa: BLE001 — still try the key
+                _LOGGER.debug("Client announce before sendkey failed", exc_info=True)
         if kind in {"screenshot", "capture", "capturescreen"}:
             self.capture_screenshot()
             return
@@ -586,6 +591,14 @@ class HisenseTvClient:
             self.open_source()
             return
         self._publish_action("remote_service", "sendkey", key, as_key=True)
+
+    def submit_code(self, code: str) -> None:
+        """Send the 4 digits shown on the TV after vidaa_app_connect."""
+        digits = "".join(ch for ch in str(code) if ch.isdigit())
+        if not digits:
+            raise ValueError("empty pairing code")
+        self._publish_action("ui_service", "authenticationcode", {"authNum": digits})
+        self.state.needs_pin = False
 
     def capture_screenshot(self) -> None:
         """爱家 截屏: captureTvScreen / getTvScreenInfo."""
@@ -649,20 +662,10 @@ class HisenseTvClient:
         return self.state
 
     async def async_send_key(self, key: str) -> None:
-        kind = key.strip().lower()
-        ble = self.ble
-        if ble is not None and kind not in {"screenshot", "smart_image", "smartimage", "ai"}:
-            try:
-                if await ble.async_send_key(key):
-                    return
-            except Exception:  # noqa: BLE001 — still try MQTT
-                _LOGGER.warning("BLE sendkey failed for %s, falling back to MQTT", key, exc_info=True)
-        try:
-            await asyncio.get_running_loop().run_in_executor(None, self.send_key, key)
-        except Exception:
-            if ble is None:
-                raise
-            _LOGGER.debug("MQTT sendkey failed after BLE", exc_info=True)
+        await asyncio.get_running_loop().run_in_executor(None, self.send_key, key)
+
+    async def async_submit_code(self, code: str) -> None:
+        await asyncio.get_running_loop().run_in_executor(None, self.submit_code, code)
 
     async def async_connect_ble(self, hass: Any, address: str) -> None:
         from .ble_hid import HisenseBleRemote

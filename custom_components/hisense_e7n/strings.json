@@ -3,13 +3,12 @@
     "step": {
       "user": {
         "title": "Hisense E7N Pro",
-        "description": "The TV must be on. 爱家 pairing asks to turn Bluetooth on — enable Bluetooth on the Home Assistant host and fill the TV BLE address. MQTT 36669 is optional status; keys go over BLE.",
+        "description": "The TV must be on. Keys use the TV's own MQTT on port 36669. You do not need a Bluetooth MAC — 爱家 only asks for Bluetooth while adding appliances. Wi-Fi MAC is only for Wake-on-LAN.",
         "data": {
           "host": "TV IP address",
           "port": "MQTT port",
           "power_on_button": "Power-on button",
-          "mac": "TV MAC",
-          "ble_address": "TV Bluetooth address",
+          "mac": "TV Wi-Fi MAC",
           "name": "Name",
           "auth_mode": "Auth mode",
           "client_cert": "Client certificate PEM (optional)",
@@ -18,8 +17,7 @@
         "data_description": {
           "host": "IPv4 of the E7N Pro. Give it a DHCP reservation.",
           "power_on_button": "Home Assistant button / switch / script that physically turns the TV on (IR blaster key, smart plug, helper button). Turn-on calls button.press (or switch.turn_on). MQTT KEY_POWER cannot start a dead TV.",
-          "mac": "Wi-Fi MAC. Used for Wake-on-LAN if no power-on button is set.",
-          "ble_address": "Same prompt as 爱家: turn Bluetooth on, then enter the TV BLE MAC (settings / about). Keys are sent as Hisense BLE HID reports.",
+          "mac": "Optional. Wi-Fi MAC for Wake-on-LAN only. It is not the remote identity, and it is not a Bluetooth address.",
           "auth_mode": "auto tries modern VIDAA credentials first, then legacy static login.",
           "client_cert": "Leave empty to use a generated stand-in cert. If MQTT rc=5, extract the VIDAA/爱家 client cert (see docs)."
         }
@@ -45,14 +43,12 @@
           "host": "TV IP address",
           "port": "MQTT port",
           "power_on_button": "Power-on button",
-          "mac": "TV MAC",
-          "ble_address": "TV Bluetooth address",
+          "mac": "TV Wi-Fi MAC",
           "name": "Name"
         },
         "data_description": {
           "power_on_button": "Entity pressed when the TV is off. Aijia cannot power the TV on by itself.",
-          "mac": "Wi-Fi MAC for Wake-on-LAN.",
-          "ble_address": "Enable Bluetooth on the Home Assistant host and enter the TV BLE MAC. 爱家 pairing uses the same prompt."
+          "mac": "Wi-Fi MAC for Wake-on-LAN. Leave blank if you do not use it."
         }
       }
     },

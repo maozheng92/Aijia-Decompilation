@@ -2,13 +2,13 @@
 
 ## 结论：E7N Pro 用哪条路
 
-E7N Pro 是 **VIDAA** 智能电视（国内与爱家 App 配套）。爱家**添加电视会提示打开蓝牙**（`flutter_blue_plus` + Hisense GATT `3a69180b-…-00805f587e61`）。MQTT `:36669` 可以连上但按键无反应，是因为爱家配对/发键走 BLE，不是 VIDAA sendkey。
+E7N Pro 是 **VIDAA** 智能电视（国内与爱家 App 配套）。爱家添加家电时会提示打开蓝牙，那是配网扫描，**电视设置里通常没有蓝牙 MAC，遥控也不用填它**。按键走电视自己的 MQTT `:36669`，topic 身份是集成保存的客户端 id（`{uuid}$his$……_vidaacommon_001`），不是电视的 Wi‑Fi MAC。
 
 | 通道 | 何时出现 | 是否适合 HA |
 |---|---|---|
-| **电视 BLE HID / Hisense GATT** | 爱家配对提示「打开蓝牙」 | **按键主路径。** HA 主机也要开蓝牙，并填写电视蓝牙地址 |
-| 机内 MQTT `:36669`（TLS） | 电视开机或网络待机 | 状态/截屏/AI 识图；按键仅作 BLE 失败时的回退 |
+| **机内 MQTT `:36669`（TLS）** | 电视开机或网络待机 | **按键和状态。** 只发给当前连接的 client id |
 | 爱家云 `pushRemoter` / `devices/execute` | 手机 App 远程 | 要账号 token，不适合本地集成 |
+| 爱家「打开蓝牙」 | 添加空调等家电 | 不是 E7N 遥控，集成不再要求蓝牙地址 |
 | HiConnect UDP `229.x.x.x` + TCP/AES | 爱家同网发现/家电控制 | 家电通用栈，本集成不走 |
 | 红外 `TRANSMIT_IR` | 手机有红外 | 不走手机红外；HA 侧用红外宝/插座的 **button** 开机 |
 | Wake-on-LAN | 部分机型网络待机 | 仅当未配置开机按钮时的可选回退 |
@@ -20,18 +20,12 @@ E7N Pro 是 **VIDAA** 智能电视（国内与爱家 App 配套）。爱家**添
 payload: KEY_POWER          （VIDAA 原文；JSON {"key":"KEY_POWER"} 是爱家云格式）
 ```
 
-`<identity>` **不等于** MQTT CONNECT 的 `client_id`。电视实际监听的是：
-
-- `{电视MAC}$vidaa_common`（社区 RemoteNOW / 较新 VIDAA）
-- `{电视MAC}$normal`（爱家 / newAM）
-- 以及当前会话的 `client_id`
-
-MQTT 能连上但所有按键无反应，几乎都是发到了 `hisense_ha_…` 或随机 UUID，电视把报文丢掉。配置里请填写电视 MAC；集成会向上述身份各发一遍（原文 `KEY_*` 和爱家 JSON）。
+`<identity>` 就是这次 MQTT CONNECT 的 `client_id`。把电视 Wi‑Fi MAC 填进 topic（`$vidaa_common` / `$normal`）时，连接可以成功，按键会被丢掉。
 
 E7N Pro（以及同代 E7N / E7NQ Pro）固件在 2024 之后通常还要：
 
 1. **动态 MQTT 用户名/密码**（由客户端 UUID + 时间戳算出，旧账号 `hisenseservice` / `multimqttservice` 会 rc=5）
-2. **爱家手机配对不需要 PIN，但要打开蓝牙**
+2. **爱家手机配对不需要 PIN。** 电视第一次授权这个 HA 客户端时，可能在屏幕上显示 4 位数字
 3. TLS 上的客户端证书（很多机器只检查「有证书」；严格固件才要官方 VIDAA/爱家证书）
 
 ## 集成做什么
@@ -41,7 +35,7 @@ E7N Pro（以及同代 E7N / E7NQ Pro）固件在 2024 之后通常还要：
 - `media_player`：开关、音量、静音、输入源、播放/暂停；**关机后开机调用配置的 button 设备**（`button.press` / `switch.turn_on` / `script.turn_on`），不指望爱家 `KEY_POWER`
 - `remote`：发送 `KEY_*`（可用 Universal Remote Card）；关机状态下的电源键同样走开机按钮
 - `button`：爱家「电视」遥控页同款按键（电源、音量、截屏、信号源、AI识图、设置、方向键、OK、返回、首页、菜单）。「切换遥控模式」和底部语音是手机 App 能力，不映射成电视键
-- 配置流：IP + **电视蓝牙地址**（无 PIN）；BLE 配对成功即可添加，MQTT 失败也可以
+- 配置流：填 IP 即可。不需要蓝牙地址。若电视屏幕弹出 4 位数字，调用 `hisense_e7n.submit_code`
 - `iot_class: local_push`，不经过海信云
 
 ## 安装
@@ -49,22 +43,20 @@ E7N Pro（以及同代 E7N / E7NQ Pro）固件在 2024 之后通常还要：
 1. 把整个 `custom_components/hisense_e7n` 拷到 Home Assistant 的 `config/custom_components/`。
 2. 重启 Home Assistant。
 3. **设置 → 设备与服务 → 添加集成 → Hisense E7N Pro**。
-4. 电视保持开机。**打开 Home Assistant 主机蓝牙**（和爱家添加电视时的提示一样），填写 **电视蓝牙地址**（设置 → 关于本机 / 蓝牙 MAC，可与 Wi‑Fi MAC 不同）。再填 IP。扫描到海信 BLE 广播时会自动带出地址。
+4. 电视保持开机，填 IP。**不用找蓝牙 MAC。** Wi‑Fi MAC 可以留空，只在要用网络唤醒时再填。
 5. **开机按钮**选一个能物理打开电视的实体（红外开机键、智能插座、辅助按钮、脚本）。爱家 App 无法开机。
-6. 爱家配对不需要 PIN。BLE 连上即可添加；MQTT 36669 连不上也可以，按键仍走蓝牙。
-7. 已添加的集成可在选项里补填蓝牙地址或更换开机按钮。
+6. 爱家手机配对不需要 PIN。若 HA 通知「电视屏幕上出现了 4 位数字」，那是电视在授权这个新遥控，把数字填进服务 `hisense_e7n.submit_code`。
+7. 已添加的集成更新后会自己换成新的客户端身份，不用重填蓝牙地址。
 
 HACS：把本仓库加为自定义仓库（类别 Integration）。
 
 ## 电视侧准备
 
-- **Home Assistant 主机打开蓝牙**（内置适配器、USB 蓝牙棒，或 HAOS 的 Bluetooth 集成）。Docker 需 `--net=host` 并映射 `/dev/bus/usb` 或 `/var/run/dbus`
-- 电视保持开机，按爱家添加设备那样允许被发现
 - 设置里打开手机遥控 / 网络控制 / 爱家控制
 - 给电视做 **DHCP 地址预留**
 - 准备一个真正能开机的 HA 实体（红外发射器的电源 button、切断待机供电的智能插座、或封装红外的 script）
-- 同一二层网络；MQTT 状态需要时放行 **TCP 36669**
-- 关机按键走 BLE `KEY_POWER`；完全断电后只能按开机按钮
+- Home Assistant 与电视同一二层网络，放行 **TCP 36669**
+- 关机走 MQTT `KEY_POWER`；完全断电后只能按开机按钮
 
 ## 服务
 
@@ -151,11 +143,20 @@ script:
 
 ## 和爱家云的关系
 
-手机不在家时，爱家走 `https://mobile-aiot.hismarttv.com/mobilemsg/push/v5.3/remoter`。那条路依赖登录态，本集成故意不实现。HA 应放在家里，用主机蓝牙发键，MQTT 只读状态。
+手机不在家时，爱家走 `https://mobile-aiot.hismarttv.com/mobilemsg/push/v5.3/remoter`。那条路依赖登录态，本集成故意不实现。HA 应放在家里，直连 `:36669`。
 
 ## 按键仍无反应
 
-1. Home Assistant 所在机器是否真的有蓝牙（HAOS：设置 → 蓝牙；Core/Docker：适配器进容器）。爱家添加电视同样会卡在「请打开蓝牙」。
-2. 填的是 **蓝牙 MAC**，不是一定等于 Wi‑Fi MAC。集成选项里可改。
-3. 电视需在旁边、已开机、可被手机搜到。
-4. 截屏 / AI 识图仍走 MQTT，需要 36669。方向键、音量、电源、首页走 BLE。
+1. 确认集成已更新到 1.4.2 并重启。旧版本把电视 Wi‑Fi MAC 当成遥控身份，电视会丢掉按键。
+2. 电视需已开机，和 HA 同一局域网。
+3. 若屏幕或 HA 通知里出现 4 位数字：
+
+```yaml
+service: hisense_e7n.submit_code
+target:
+  entity_id: remote.hisense_e7n_pro_remote
+data:
+  code: "1234"
+```
+
+没有这 4 位数字就不用填。爱家手机配对本身不使用 PIN。

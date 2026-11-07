@@ -34,6 +34,11 @@ async def async_setup_entry(
         {vol.Required("key"): cv.string},
         "async_send_key_service",
     )
+    platform.async_register_entity_service(
+        "submit_code",
+        {vol.Required("code"): cv.string},
+        "async_submit_code",
+    )
 
 
 class HisenseTvRemote(HisenseTvEntity, RemoteEntity):
@@ -59,6 +64,9 @@ class HisenseTvRemote(HisenseTvEntity, RemoteEntity):
 
     async def async_send_key_service(self, key: str) -> None:
         await self.coordinator.client.async_send_key(normalize_key(key))
+
+    async def async_submit_code(self, code: str) -> None:
+        await self.coordinator.client.async_submit_code(code)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

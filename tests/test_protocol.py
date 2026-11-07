@@ -51,26 +51,24 @@ def test_sendkey_topic_uses_client_id(proto_credentials, proto_topics) -> None:
     assert "HomeAssistant" not in topic
 
 
-def test_sendkey_fanout_includes_tv_mac_identities(proto_credentials, proto_topics) -> None:
+def test_sendkey_uses_connected_client_only(proto_credentials, proto_topics) -> None:
     creds = proto_credentials.generate_dynamic_credentials(
         "12:34:56:78:9a:bc", timestamp=1766974704
     )
     topics = proto_topics.action_topics(
         creds, "remote_service", "sendkey", tv_mac="aa:bb:cc:dd:ee:ff"
     )
-    assert any(
-        item.endswith("/aa:bb:cc:dd:ee:ff$vidaa_common/actions/sendkey") for item in topics
-    )
-    assert any(item.endswith("/aa:bb:cc:dd:ee:ff$normal/actions/sendkey") for item in topics)
-    assert any(item.endswith("/AA:BB:CC:DD:EE:FF$normal/actions/sendkey") for item in topics)
-    assert any("/12:34:56:78:9a:bc$vidaa_common/actions/sendkey" in item for item in topics)
-    assert creds.client_id in topics[0]
+    assert topics == [
+        f"/remoteapp/tv/remote_service/{creds.client_id}/actions/sendkey"
+    ]
+    assert "aa:bb:cc:dd:ee:ff" not in topics[0]
 
 
-def test_pair_topic_and_subscriptions_are_concrete(proto_credentials, proto_topics) -> None:
+def test_pair_topic_and_subscriptions_are_concrete(proto_client, proto_credentials, proto_topics) -> None:
     creds = proto_credentials.generate_dynamic_credentials(
         "56:b8:88:4e:f7:19", timestamp=1766974704
     )
+    assert proto_client.CONNECT_PAYLOAD["device_type"] == "Mobile App"
     assert proto_topics.vidaa_app_connect(creds).endswith("/actions/vidaa_app_connect")
     subs = proto_topics.subscription_topics(creds)
     assert not any(item.endswith("#") or "/+" in item for item in subs)
@@ -120,12 +118,12 @@ def test_send_key_publishes_raw_and_json_on_mac_topics(proto_client, proto_crede
     client.send_key("home")
     topics = [topic for topic, _ in published]
     payloads = [payload for _, payload in published]
-    assert any(
-        topic.endswith("/aa:bb:cc:dd:ee:ff$vidaa_common/actions/sendkey") for topic in topics
-    )
-    assert any(topic.endswith("/aa:bb:cc:dd:ee:ff$normal/actions/sendkey") for topic in topics)
+    assert topics
+    assert all(client._creds.client_id in topic for topic in topics)
+    assert not any("aa:bb:cc:dd:ee:ff$vidaa_common" in topic for topic in topics)
     assert "KEY_HOME" in payloads
     assert '{"key":"KEY_HOME"}' in payloads
+    assert any(topic.endswith("/actions/vidaa_app_connect") for topic in topics)
     published.clear()
     client.send_key("screenshot")
     shot_topics = [topic for topic, _ in published]

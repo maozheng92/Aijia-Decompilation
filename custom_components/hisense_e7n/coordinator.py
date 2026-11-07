@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from homeassistant.components import persistent_notification
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
@@ -36,6 +37,7 @@ class HisenseTvCoordinator(DataUpdateCoordinator[TvState]):
         self.client = client
         self.device_name = name
         self.power_on_button = normalize_power_on_entity(power_on_button)
+        self._pin_notified = False
         client.add_listener(self._on_client_state)
 
     @property
@@ -44,7 +46,29 @@ class HisenseTvCoordinator(DataUpdateCoordinator[TvState]):
 
     @callback
     def _on_client_state(self, state: TvState) -> None:
-        self.hass.loop.call_soon_threadsafe(self.async_set_updated_data, state)
+        self.hass.loop.call_soon_threadsafe(self._deliver_state, state)
+
+    @callback
+    def _deliver_state(self, state: TvState) -> None:
+        self.async_set_updated_data(state)
+        notification_id = f"{DOMAIN}_pair_{self.device_name}"
+        if state.already_paired:
+            self._pin_notified = False
+            persistent_notification.async_dismiss(self.hass, notification_id)
+            return
+        if state.needs_pin and not self._pin_notified:
+            self._pin_notified = True
+            persistent_notification.async_create(
+                self.hass,
+                (
+                    "电视屏幕上出现了 4 位数字。在开发者工具 → 服务里调用 "
+                    f"`{DOMAIN}.submit_code`，目标选这台电视的 Remote，"
+                    "把屏幕上的数字填进 code。爱家手机本身不需要这个码；"
+                    "这是电视授权一个新的局域网遥控。"
+                ),
+                title="海信电视需要授权",
+                notification_id=notification_id,
+            )
 
     async def _async_update_data(self) -> TvState:
         if self.client.state.available:

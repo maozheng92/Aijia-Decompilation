@@ -1,3 +1,21 @@
+submit_code:
+  name: Submit TV code
+  description: >
+    Send the 4 digits shown on the TV after this integration connects.
+    爱家手机配对不显示这个码；只有电视授权新的局域网遥控时才会出现。
+  target:
+    entity:
+      integration: hisense_e7n
+      domain: remote
+  fields:
+    code:
+      name: Code
+      description: Digits shown on the TV.
+      required: true
+      example: "1234"
+      selector:
+        text:
+
 send_key:
   name: Send remote key
   description: Send a 爱家 remoter KEY_* code over BLE (MQTT fallback).
