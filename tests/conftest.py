@@ -71,3 +71,8 @@ def proto_client(proto_topics, proto_keys, proto_const, proto_certs):
 @pytest.fixture(scope="session")
 def proto_power():
     return load_proto("power")
+
+
+@pytest.fixture(scope="session")
+def proto_ble(proto_keys):
+    return load_proto("ble_hid")

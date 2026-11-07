@@ -3,12 +3,13 @@
     "step": {
       "user": {
         "title": "海信 E7N Pro",
-        "description": "电视需已开机。默认端口 36669（VIDAA 机内 MQTT / TLS）。爱家手机配对不需要 PIN，连上 MQTT 即可。请选择一个真正能开机的 Button 设备。",
+        "description": "电视需已开机。爱家添加电视会提示打开蓝牙：请打开 Home Assistant 主机蓝牙，并填写电视蓝牙地址。按键走 BLE，36669 MQTT 只作状态。",
         "data": {
           "host": "电视 IP",
           "port": "MQTT 端口",
           "power_on_button": "开机按钮",
           "mac": "电视 MAC",
+          "ble_address": "电视蓝牙地址",
           "name": "名称",
           "auth_mode": "认证模式",
           "client_cert": "客户端证书 PEM（可选）",
@@ -17,7 +18,8 @@
         "data_description": {
           "host": "给 E7N Pro 做 DHCP 地址预留，避免 IP 变化。",
           "power_on_button": "选择一个能物理开机的 Home Assistant 实体：红外开机键、智能插座、辅助按钮或脚本。关机后开机调用 button.press（插座则 switch.turn_on），不再指望爱家/MQTT 的 KEY_POWER。",
-          "mac": "请填写电视 MAC。按键 topic 认的是「电视MAC$vidaa_common」或「电视MAC$normal」；未配开机按钮时也用于 Wake-on-LAN。",
+          "mac": "Wi-Fi MAC。未配开机按钮时用于 Wake-on-LAN。",
+          "ble_address": "和爱家一样先开蓝牙。填电视蓝牙 MAC（设置 / 关于本机）。按键按海信 BLE HID 报告发送。",
           "auth_mode": "auto 会先试新固件动态凭证，再回退旧固件静态账号。",
           "client_cert": "留空则使用生成的占位证书。若 MQTT 返回 rc=5，请按文档放入爱家/VIDAA 客户端证书。"
         }
@@ -27,7 +29,8 @@
       "cannot_connect": "连不上电视的 MQTT 端口（默认 36669）。请确认电视已完全开机（不是待机）、填的是电视局域网 IP、Home Assistant 与电视同一网段，并且已打开「手机遥控 / 网络控制」。",
       "timeout": "36669 端口能通，但电视没有完成 MQTT 握手。请等电视完全进入桌面后再添加。",
       "tls_failed": "已连上 36669，但 TLS 握手失败。集成会自动使用旧加密套件和爱家里的客户端证书，请重启电视后再试。若仍失败，部分固件是明文 MQTT，认证模式保持 auto 即可。",
-      "not_authorized": "MQTT 已接通，但账号被拒绝（rc=5）。请保持认证模式 auto，并把电视时间/时区设正确后重试。新固件用动态凭证，旧固件用 hisenseservice。"
+      "not_authorized": "MQTT 已接通，但账号被拒绝（rc=5）。请保持认证模式 auto，并把电视时间/时区设正确后重试。新固件用动态凭证，旧固件用 hisenseservice。",
+      "cannot_connect_ble": "蓝牙配对失败。请打开 Home Assistant 所在机器的蓝牙（爱家添加电视同样会提示开蓝牙），并确认电视蓝牙地址。"
     },
     "abort": {
       "already_configured": "这台电视已经添加过了。",
@@ -43,13 +46,18 @@
           "port": "MQTT 端口",
           "power_on_button": "开机按钮",
           "mac": "电视 MAC",
+          "ble_address": "电视蓝牙地址",
           "name": "名称"
         },
         "data_description": {
           "power_on_button": "电视关机后按下的实体。爱家本身无法开机。",
-          "mac": "请填写电视 MAC，否则 MQTT 能连上但按键无反应。"
+          "mac": "Wi-Fi MAC，用于 Wake-on-LAN。",
+          "ble_address": "打开 Home Assistant 主机蓝牙，填写电视蓝牙 MAC。爱家配对同样要求开蓝牙。"
         }
       }
+    },
+    "error": {
+      "cannot_connect_ble": "电视蓝牙地址无效或连不上。请打开 Home Assistant 主机蓝牙后重试。"
     }
   },
   "entity": {

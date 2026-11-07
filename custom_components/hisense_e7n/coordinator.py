@@ -40,7 +40,7 @@ class HisenseTvCoordinator(DataUpdateCoordinator[TvState]):
 
     @property
     def can_power_on(self) -> bool:
-        return bool(self.power_on_button or self.client.tv_mac)
+        return bool(self.power_on_button or self.client.tv_mac or self.client.ble)
 
     @callback
     def _on_client_state(self, state: TvState) -> None:

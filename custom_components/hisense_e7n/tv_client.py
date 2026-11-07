@@ -188,6 +188,7 @@ class HisenseTvClient:
         self._token_event: asyncio.Event | None = None
         self._connect_rc: int = -1
         self._lock = threading.Lock()
+        self.ble: Any = None
 
     @property
     def creds(self) -> MqttCredentials | None:
@@ -361,6 +362,11 @@ class HisenseTvClient:
                 reason_code = item
                 break
         _LOGGER.info("Disconnected from TV rc=%s", reason_code)
+        ble_up = self.ble is not None and getattr(self.ble, "connected", False)
+        if ble_up:
+            self.state.available = True
+            self._notify()
+            return
         self.state.available = False
         self.state.power_on = False
         self._notify()
@@ -537,10 +543,6 @@ class HisenseTvClient:
             pass
         self.state.available = False
 
-    async def async_disconnect(self) -> None:
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, self.disconnect_blocking)
-
     def _require_creds(self) -> MqttCredentials:
         if self._creds is None:
             raise RuntimeError("Not connected")
@@ -647,7 +649,41 @@ class HisenseTvClient:
         return self.state
 
     async def async_send_key(self, key: str) -> None:
-        await asyncio.get_running_loop().run_in_executor(None, self.send_key, key)
+        kind = key.strip().lower()
+        ble = self.ble
+        if ble is not None and kind not in {"screenshot", "smart_image", "smartimage", "ai"}:
+            try:
+                if await ble.async_send_key(key):
+                    return
+            except Exception:  # noqa: BLE001 — still try MQTT
+                _LOGGER.warning("BLE sendkey failed for %s, falling back to MQTT", key, exc_info=True)
+        try:
+            await asyncio.get_running_loop().run_in_executor(None, self.send_key, key)
+        except Exception:
+            if ble is None:
+                raise
+            _LOGGER.debug("MQTT sendkey failed after BLE", exc_info=True)
+
+    async def async_connect_ble(self, hass: Any, address: str) -> None:
+        from .ble_hid import HisenseBleRemote
+
+        remote = HisenseBleRemote(hass, address)
+        await remote.async_connect()
+        self.ble = remote
+        self.state.available = True
+        self.state.power_on = True
+        self._notify()
+
+    async def async_disconnect(self) -> None:
+        loop = asyncio.get_running_loop()
+        ble = self.ble
+        self.ble = None
+        if ble is not None:
+            try:
+                await ble.async_disconnect()
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("BLE disconnect failed", exc_info=True)
+        await loop.run_in_executor(None, self.disconnect_blocking)
 
     async def async_capture_screenshot(self) -> None:
         await asyncio.get_running_loop().run_in_executor(None, self.capture_screenshot)
@@ -683,8 +719,23 @@ class HisenseTvClient:
         return False
 
     async def async_turn_on(self) -> None:
-        """Wake via Wake-on-LAN when no HA button is configured."""
+        """Wake via BLE KEY_POWER, then Wake-on-LAN when no HA button is configured."""
         if self.state.available:
+            return
+        ble = self.ble
+        if ble is not None:
+            try:
+                await ble.async_send_key(KEY_POWER)
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("BLE power-on failed", exc_info=True)
+            if getattr(ble, "connected", False):
+                self.state.available = True
+                self.state.power_on = True
+                self._notify()
+            try:
+                await self.async_connect()
+            except ConnectionError:
+                _LOGGER.debug("MQTT still down after BLE power-on")
             return
         if self.tv_mac:
             await asyncio.get_running_loop().run_in_executor(None, send_wol, self.tv_mac)

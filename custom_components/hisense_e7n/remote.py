@@ -62,7 +62,11 @@ class HisenseTvRemote(HisenseTvEntity, RemoteEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {"commands": aijia_send_commands()}
+        ble = self.coordinator.client.ble
+        return {
+            "commands": aijia_send_commands(),
+            "ble_connected": bool(ble is not None and getattr(ble, "connected", False)),
+        }
 
     async def async_send_command(self, command: Iterable[str], **kwargs: Any) -> None:
         repeats = int(kwargs.get("num_repeats") or 1)

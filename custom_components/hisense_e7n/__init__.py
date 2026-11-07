@@ -10,9 +10,11 @@ from homeassistant.const import CONF_HOST, CONF_MAC, CONF_NAME, CONF_PORT, Platf
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 
+from .ble_hid import normalize_ble_address
 from .certs_util import resolve_cert_candidates
 from .const import (
     CONF_AUTH_MODE,
+    CONF_BLE_ADDRESS,
     CONF_CLIENT_CERT,
     CONF_CLIENT_KEY,
     CONF_CLIENT_UUID,
@@ -73,18 +75,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         loop=hass.loop,
     )
 
+    raw_ble = (data.get(CONF_BLE_ADDRESS) or "").strip()
+    try:
+        ble_address = normalize_ble_address(raw_ble) or ""
+    except ValueError:
+        ble_address = raw_ble
+    ble_ok = False
+    if ble_address:
+        try:
+            await client.async_connect_ble(hass, ble_address)
+            ble_ok = True
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("BLE pair with %s failed: %s", ble_address, err)
+
     try:
         await client.async_connect()
     except ConnectionError as err:
-        # Broker is down when the TV is fully off; still load if we can press
-        # a power-on button (or fall back to Wake-on-LAN).
-        if not power_on_button and not data.get(CONF_MAC):
+        # Broker is down when the TV is fully off; still load if BLE is up,
+        # we can press a power-on button, or fall back to Wake-on-LAN.
+        if not ble_ok and not power_on_button and not data.get(CONF_MAC):
             raise ConfigEntryNotReady(f"Cannot reach Hisense TV at {host}:{port}") from err
         _LOGGER.warning(
             "TV at %s:%s is offline; turn-on will call %s (%s)",
             host,
             port,
-            power_on_button or data.get(CONF_MAC),
+            power_on_button or data.get(CONF_MAC) or ble_address,
             err,
         )
 

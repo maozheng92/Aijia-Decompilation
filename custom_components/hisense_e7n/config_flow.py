@@ -25,10 +25,12 @@ from homeassistant.helpers.selector import (
     TextSelectorConfig,
 )
 
+from .ble_hid import discovered_ble_addresses, normalize_ble_address
 from .certs_util import resolve_cert_candidates
 from .const import (
     AUTH_MODES,
     CONF_AUTH_MODE,
+    CONF_BLE_ADDRESS,
     CONF_CLIENT_CERT,
     CONF_CLIENT_KEY,
     CONF_CLIENT_UUID,
@@ -55,6 +57,7 @@ STEP_USER_DATA = vol.Schema(
         ),
         vol.Optional(CONF_POWER_ON_BUTTON): POWER_ON_BUTTON_SELECTOR,
         vol.Optional(CONF_MAC): TextSelector(TextSelectorConfig(type="text")),
+        vol.Optional(CONF_BLE_ADDRESS): TextSelector(TextSelectorConfig(type="text")),
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): str,
         vol.Optional(CONF_AUTH_MODE, default=DEFAULT_AUTH_MODE): SelectSelector(
             SelectSelectorConfig(
@@ -113,19 +116,38 @@ class HisenseE7NConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 loop=self.hass.loop,
             )
             self._client = client
+            ble_address = None
+            raw_ble = (user_input.get(CONF_BLE_ADDRESS) or "").strip()
+            if raw_ble:
+                try:
+                    ble_address = normalize_ble_address(raw_ble)
+                except ValueError:
+                    errors[CONF_BLE_ADDRESS] = "cannot_connect_ble"
+            ble_ok = False
+            if ble_address and CONF_BLE_ADDRESS not in errors:
+                try:
+                    await client.async_connect_ble(self.hass, ble_address)
+                    ble_ok = True
+                except Exception:  # noqa: BLE001
+                    errors[CONF_BLE_ADDRESS] = "cannot_connect_ble"
+            mqtt_ok = False
             try:
                 await client.async_connect()
+                mqtt_ok = True
             except ConnectionError as err:
-                errors["base"] = classify_connect_error(str(err))
-            else:
+                if not ble_ok:
+                    errors["base"] = classify_connect_error(str(err))
+            if mqtt_ok:
                 try:
                     await client.async_pair()
                 except Exception:  # noqa: BLE001 — announce is best-effort; MQTT already succeeded
                     pass
+            if not errors:
                 data = {
                     CONF_HOST: host,
                     CONF_PORT: port,
                     CONF_MAC: (user_input.get(CONF_MAC) or "").strip(),
+                    CONF_BLE_ADDRESS: ble_address or "",
                     CONF_POWER_ON_BUTTON: normalize_power_on_entity(
                         user_input.get(CONF_POWER_ON_BUTTON)
                     )
@@ -143,10 +165,19 @@ class HisenseE7NConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     title=data.get(CONF_NAME) or DEFAULT_NAME,
                     data=data,
                 )
+            await client.async_disconnect()
+            self._client = None
 
+        suggested: dict[str, Any] = dict(user_input or {})
+        found = discovered_ble_addresses(self.hass)
+        if found and not (suggested.get(CONF_BLE_ADDRESS) or "").strip():
+            suggested[CONF_BLE_ADDRESS] = found[0]
+        schema = STEP_USER_DATA
+        if suggested:
+            schema = self.add_suggested_values_to_schema(STEP_USER_DATA, suggested)
         return self.async_show_form(
             step_id="user",
-            data_schema=STEP_USER_DATA,
+            data_schema=schema,
             errors=errors,
         )
 
@@ -163,7 +194,7 @@ class HisenseE7NConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class HisenseE7NOptionsFlow(config_entries.OptionsFlow):
-    """Tune host, power-on button, and MAC without re-pairing."""
+    """Tune host, BLE address, power-on button, and MAC without re-pairing."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry | None = None) -> None:
         if config_entry is not None:
@@ -174,6 +205,7 @@ class HisenseE7NOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         data = {**self._entry().data, **self._entry().options}
+        errors: dict[str, str] = {}
         if user_input is not None:
             if CONF_POWER_ON_BUTTON in user_input:
                 user_input[CONF_POWER_ON_BUTTON] = (
@@ -183,7 +215,16 @@ class HisenseE7NOptionsFlow(config_entries.OptionsFlow):
                 user_input[CONF_POWER_ON_BUTTON] = (
                     normalize_power_on_entity(data.get(CONF_POWER_ON_BUTTON)) or ""
                 )
-            return self.async_create_entry(title="", data=user_input)
+            raw_ble = (user_input.get(CONF_BLE_ADDRESS) or "").strip()
+            if raw_ble:
+                try:
+                    user_input[CONF_BLE_ADDRESS] = normalize_ble_address(raw_ble)
+                except ValueError:
+                    errors[CONF_BLE_ADDRESS] = "cannot_connect_ble"
+            else:
+                user_input[CONF_BLE_ADDRESS] = ""
+            if not errors:
+                return self.async_create_entry(title="", data=user_input)
 
         schema = vol.Schema(
             {
@@ -193,13 +234,17 @@ class HisenseE7NOptionsFlow(config_entries.OptionsFlow):
                 ),
                 vol.Optional(CONF_POWER_ON_BUTTON): POWER_ON_BUTTON_SELECTOR,
                 vol.Optional(CONF_MAC, default=data.get(CONF_MAC, "")): str,
+                vol.Optional(CONF_BLE_ADDRESS, default=data.get(CONF_BLE_ADDRESS, "")): str,
                 vol.Optional(CONF_NAME, default=data.get(CONF_NAME, DEFAULT_NAME)): str,
             }
         )
         suggested = dict(data)
+        if user_input:
+            suggested.update(user_input)
         if not normalize_power_on_entity(suggested.get(CONF_POWER_ON_BUTTON)):
             suggested.pop(CONF_POWER_ON_BUTTON, None)
         return self.async_show_form(
             step_id="init",
             data_schema=self.add_suggested_values_to_schema(schema, suggested),
+            errors=errors,
         )

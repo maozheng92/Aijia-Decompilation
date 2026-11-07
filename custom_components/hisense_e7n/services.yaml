@@ -1,6 +1,6 @@
 send_key:
   name: Send remote key
-  description: Send a VIDAA / 爱家 KEY_* code to the TV.
+  description: Send a 爱家 remoter KEY_* code over BLE (MQTT fallback).
   target:
     entity:
       integration: hisense_e7n

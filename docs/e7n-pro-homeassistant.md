@@ -2,13 +2,14 @@
 
 ## 结论：E7N Pro 用哪条路
 
-E7N Pro 是 **VIDAA** 智能电视（国内与爱家 App 配套）。结合 `com.hisense.ms.fly2tv` 的按键字面量和 VIDAA 机内协议，**给 Home Assistant 用的正确通道是电视自己的 MQTT，不是爱家云。**
+E7N Pro 是 **VIDAA** 智能电视（国内与爱家 App 配套）。爱家**添加电视会提示打开蓝牙**（`flutter_blue_plus` + Hisense GATT `3a69180b-…-00805f587e61`）。MQTT `:36669` 可以连上但按键无反应，是因为爱家配对/发键走 BLE，不是 VIDAA sendkey。
 
 | 通道 | 何时出现 | 是否适合 HA |
 |---|---|---|
-| **机内 MQTT `:36669`（TLS）** | 电视开机或网络待机 | **首选。** 局域网、可推送状态、按键与爱家相同 |
+| **电视 BLE HID / Hisense GATT** | 爱家配对提示「打开蓝牙」 | **按键主路径。** HA 主机也要开蓝牙，并填写电视蓝牙地址 |
+| 机内 MQTT `:36669`（TLS） | 电视开机或网络待机 | 状态/截屏/AI 识图；按键仅作 BLE 失败时的回退 |
 | 爱家云 `pushRemoter` / `devices/execute` | 手机 App 远程 | 要账号 token，不适合本地集成 |
-| HiConnect UDP `229.x.x.x` + TCP/AES | 爱家同网发现/家电控制 | 家电通用栈，电视遥控仍落到 MQTT/`KEY_*` |
+| HiConnect UDP `229.x.x.x` + TCP/AES | 爱家同网发现/家电控制 | 家电通用栈，本集成不走 |
 | 红外 `TRANSMIT_IR` | 手机有红外 | 不走手机红外；HA 侧用红外宝/插座的 **button** 开机 |
 | Wake-on-LAN | 部分机型网络待机 | 仅当未配置开机按钮时的可选回退 |
 
@@ -30,7 +31,7 @@ MQTT 能连上但所有按键无反应，几乎都是发到了 `hisense_ha_…` 
 E7N Pro（以及同代 E7N / E7NQ Pro）固件在 2024 之后通常还要：
 
 1. **动态 MQTT 用户名/密码**（由客户端 UUID + 时间戳算出，旧账号 `hisenseservice` / `multimqttservice` 会 rc=5）
-2. **爱家手机配对不需要 PIN**，MQTT 连通即可
+2. **爱家手机配对不需要 PIN，但要打开蓝牙**
 3. TLS 上的客户端证书（很多机器只检查「有证书」；严格固件才要官方 VIDAA/爱家证书）
 
 ## 集成做什么
@@ -40,7 +41,7 @@ E7N Pro（以及同代 E7N / E7NQ Pro）固件在 2024 之后通常还要：
 - `media_player`：开关、音量、静音、输入源、播放/暂停；**关机后开机调用配置的 button 设备**（`button.press` / `switch.turn_on` / `script.turn_on`），不指望爱家 `KEY_POWER`
 - `remote`：发送 `KEY_*`（可用 Universal Remote Card）；关机状态下的电源键同样走开机按钮
 - `button`：爱家「电视」遥控页同款按键（电源、音量、截屏、信号源、AI识图、设置、方向键、OK、返回、首页、菜单）。「切换遥控模式」和底部语音是手机 App 能力，不映射成电视键
-- 配置流：IP → 连接（无 PIN）；可选绑定开机按钮
+- 配置流：IP + **电视蓝牙地址**（无 PIN）；BLE 配对成功即可添加，MQTT 失败也可以
 - `iot_class: local_push`，不经过海信云
 
 ## 安装
@@ -48,19 +49,22 @@ E7N Pro（以及同代 E7N / E7NQ Pro）固件在 2024 之后通常还要：
 1. 把整个 `custom_components/hisense_e7n` 拷到 Home Assistant 的 `config/custom_components/`。
 2. 重启 Home Assistant。
 3. **设置 → 设备与服务 → 添加集成 → Hisense E7N Pro**。
-4. 电视保持开机，填 IP 和 **电视 MAC**（设置 → 网络 / 关于本机）。按键 topic 认 MAC，不填则 MQTT 能连上但遥控无反应。**开机按钮**选一个能物理打开电视的实体（红外开机键、智能插座、辅助按钮、脚本）。爱家 App 无法开机，集成不会再靠 MQTT `KEY_POWER` 唤醒关机的电视。
-5. 爱家配对不需要 PIN，MQTT 连上后直接完成添加。
-6. 已添加的集成可在选项里补选或更换开机按钮。
+4. 电视保持开机。**打开 Home Assistant 主机蓝牙**（和爱家添加电视时的提示一样），填写 **电视蓝牙地址**（设置 → 关于本机 / 蓝牙 MAC，可与 Wi‑Fi MAC 不同）。再填 IP。扫描到海信 BLE 广播时会自动带出地址。
+5. **开机按钮**选一个能物理打开电视的实体（红外开机键、智能插座、辅助按钮、脚本）。爱家 App 无法开机。
+6. 爱家配对不需要 PIN。BLE 连上即可添加；MQTT 36669 连不上也可以，按键仍走蓝牙。
+7. 已添加的集成可在选项里补填蓝牙地址或更换开机按钮。
 
 HACS：把本仓库加为自定义仓库（类别 Integration）。
 
 ## 电视侧准备
 
+- **Home Assistant 主机打开蓝牙**（内置适配器、USB 蓝牙棒，或 HAOS 的 Bluetooth 集成）。Docker 需 `--net=host` 并映射 `/dev/bus/usb` 或 `/var/run/dbus`
+- 电视保持开机，按爱家添加设备那样允许被发现
 - 设置里打开手机遥控 / 网络控制 / 爱家控制
 - 给电视做 **DHCP 地址预留**
 - 准备一个真正能开机的 HA 实体（红外发射器的电源 button、切断待机供电的智能插座、或封装红外的 script）
-- Home Assistant 与电视同一二层网络，放行 **TCP 36669**
-- 关机仍走 MQTT `KEY_POWER`（此时机内 broker 还在）；完全断电后只能按开机按钮
+- 同一二层网络；MQTT 状态需要时放行 **TCP 36669**
+- 关机按键走 BLE `KEY_POWER`；完全断电后只能按开机按钮
 
 ## 服务
 
@@ -147,4 +151,11 @@ script:
 
 ## 和爱家云的关系
 
-手机不在家时，爱家走 `https://mobile-aiot.hismarttv.com/mobilemsg/push/v5.3/remoter`。那条路依赖登录态，本集成故意不实现。HA 应放在家里，直连 `:36669`。
+手机不在家时，爱家走 `https://mobile-aiot.hismarttv.com/mobilemsg/push/v5.3/remoter`。那条路依赖登录态，本集成故意不实现。HA 应放在家里，用主机蓝牙发键，MQTT 只读状态。
+
+## 按键仍无反应
+
+1. Home Assistant 所在机器是否真的有蓝牙（HAOS：设置 → 蓝牙；Core/Docker：适配器进容器）。爱家添加电视同样会卡在「请打开蓝牙」。
+2. 填的是 **蓝牙 MAC**，不是一定等于 Wi‑Fi MAC。集成选项里可改。
+3. 电视需在旁边、已开机、可被手机搜到。
+4. 截屏 / AI 识图仍走 MQTT，需要 36669。方向键、音量、电源、首页走 BLE。

@@ -15,6 +15,7 @@ CONF_ACCESS_TOKEN = "access_token"
 CONF_REFRESH_TOKEN = "refresh_token"
 CONF_POWER_ON_BUTTON = "power_on_button"
 CONF_USE_SSL = "use_ssl"
+CONF_BLE_ADDRESS = "ble_address"
 
 AUTH_MODE_AUTO = "auto"
 AUTH_MODE_DYNAMIC = "dynamic"
