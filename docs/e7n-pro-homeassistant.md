@@ -150,7 +150,7 @@ power_on_button: button.living_room_ir_tv_power
 
 ## 按键仍无反应
 
-1. 确认集成已更新到 1.5.0 并重启。1.4.2 起按键只发给当前 MQTT client id；旧版本把电视 Wi‑Fi MAC 当成遥控身份，电视会丢掉按键。
+1. 确认集成已更新到 1.5.1 并重启。1.4.2 起按键只发给当前 MQTT client id；旧版本把电视 Wi‑Fi MAC 当成遥控身份，电视会丢掉按键。
 2. 电视需已开机，和 HA 同一局域网。
 3. 若屏幕或 HA 通知里出现 4 位数字：
 
