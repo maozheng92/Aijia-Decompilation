@@ -10,8 +10,8 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .const import DOMAIN
-from .power import normalize_power_on_entity, power_on_service
+from .const import DEFAULT_POWER_ON_COMMAND, DOMAIN, POWER_ON_MODE_WOL
+from .power import infer_power_on_mode, normalize_power_on_entity, power_on_call
 from .tv_client import HisenseTvClient, TvState
 
 _LOGGER = logging.getLogger(__name__)
@@ -37,12 +37,42 @@ class HisenseTvCoordinator(DataUpdateCoordinator[TvState]):
         self.client = client
         self.device_name = name
         self.power_on_button = normalize_power_on_entity(power_on_button)
+        self.power_on_mode = POWER_ON_MODE_WOL
+        self.power_on_remote: str | None = None
+        self.power_on_command = DEFAULT_POWER_ON_COMMAND
+        self.power_on_device = ""
         self._pin_notified = False
         client.add_listener(self._on_client_state)
 
+    def configure_power_on(
+        self,
+        *,
+        mode: str | None,
+        button: str | None,
+        remote: str | None,
+        command: str | None,
+        device: str | None,
+        mac: str | None,
+    ) -> None:
+        """Store this TV's wake method. Each config entry has its own."""
+        self.power_on_button = normalize_power_on_entity(button)
+        self.power_on_remote = normalize_power_on_entity(remote)
+        self.power_on_command = (command or "").strip() or DEFAULT_POWER_ON_COMMAND
+        self.power_on_device = (device or "").strip()
+        self.power_on_mode = infer_power_on_mode(mode, button, remote, mac)
+
     @property
     def can_power_on(self) -> bool:
-        return bool(self.power_on_button or self.client.tv_mac or self.client.ble)
+        if self.power_on_mode == POWER_ON_MODE_WOL:
+            return bool(self.client.tv_mac)
+        return power_on_call(
+            self.power_on_mode,
+            self.power_on_button,
+            self.power_on_remote,
+            self.power_on_command,
+            self.power_on_device,
+            self.client.tv_mac,
+        ) is not None or bool(self.client.tv_mac)
 
     @callback
     def _on_client_state(self, state: TvState) -> None:
@@ -86,20 +116,34 @@ class HisenseTvCoordinator(DataUpdateCoordinator[TvState]):
         """
         if self.client.state.available:
             return
-        button = self.power_on_button
-        if button:
-            domain, service = power_on_service(button)
-            _LOGGER.info("Powering on TV by calling %s.%s on %s", domain, service, button)
-            try:
-                await self.hass.services.async_call(
-                    domain,
-                    service,
-                    {ATTR_ENTITY_ID: button},
-                    blocking=True,
-                )
-            except HomeAssistantError:
-                _LOGGER.exception("Power-on entity %s failed", button)
-                return
-            await self.client.async_wait_for_broker()
+        if self.power_on_mode == POWER_ON_MODE_WOL:
+            await self.client.async_turn_on()
             return
-        await self.client.async_turn_on()
+        call = power_on_call(
+            self.power_on_mode,
+            self.power_on_button,
+            self.power_on_remote,
+            self.power_on_command,
+            self.power_on_device,
+            self.client.tv_mac,
+        )
+        if call is None:
+            await self.client.async_turn_on()
+            return
+        _LOGGER.info(
+            "Powering on TV by calling %s.%s with %s",
+            call.domain,
+            call.service,
+            call.data.get(ATTR_ENTITY_ID),
+        )
+        try:
+            await self.hass.services.async_call(
+                call.domain,
+                call.service,
+                call.data,
+                blocking=True,
+            )
+        except HomeAssistantError:
+            _LOGGER.exception("Power-on call %s.%s failed", call.domain, call.service)
+            return
+        await self.client.async_wait_for_broker()

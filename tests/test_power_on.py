@@ -37,6 +37,60 @@ def test_button_is_the_primary_power_on_domain(proto_power) -> None:
     assert "input_button" in proto_power.POWER_ON_DOMAINS
 
 
+def test_ir_remote_sends_one_command(proto_power) -> None:
+    call = proto_power.power_on_call(
+        "remote",
+        "button.also_configured",
+        "remote.living_room_broadlink",
+        "power",
+        device="Hisense",
+    )
+    assert call is not None
+    assert call.domain == "remote"
+    assert call.service == "send_command"
+    assert call.data == {
+        "entity_id": "remote.living_room_broadlink",
+        "command": ["power"],
+        "device": "Hisense",
+    }
+
+
+def test_button_mode_does_not_also_send_ir(proto_power) -> None:
+    call = proto_power.power_on_call(
+        "button",
+        "switch.tv_plug",
+        "remote.living_room_broadlink",
+        "power",
+    )
+    assert call is not None
+    assert (call.domain, call.service) == ("switch", "turn_on")
+    assert call.data == {"entity_id": "switch.tv_plug"}
+
+
+def test_legacy_entry_uses_the_saved_button(proto_power) -> None:
+    assert proto_power.infer_power_on_mode(None, "button.ir_tv_power", None, "aa:bb:cc:dd:ee:ff") == (
+        "button"
+    )
+    call = proto_power.power_on_call(None, "button.ir_tv_power", None, None)
+    assert call is not None
+    assert call.service == "press"
+
+
+def test_wol_mode_has_no_service_call(proto_power) -> None:
+    assert proto_power.infer_power_on_mode(None, None, None, "aa:bb:cc:dd:ee:ff") == "wol"
+    assert proto_power.power_on_call("wol", None, None, None, mac="aa:bb:cc:dd:ee:ff") is None
+
+
+def test_remote_mode_requires_entity_and_command(proto_power) -> None:
+    errors = proto_power.power_on_form_errors({"power_on_mode": "remote", "power_on_command": "  "})
+    assert errors["power_on_remote"] == "power_on_required"
+    assert errors["power_on_command"] == "power_on_required"
+
+
+def test_button_mode_can_be_left_empty(proto_power) -> None:
+    assert proto_power.power_on_form_errors({"power_on_mode": "button"}) == {}
+
+
 def test_unsupported_domain_raises(proto_power) -> None:
     with pytest.raises(ValueError, match="unsupported power-on domain"):
         proto_power.power_on_service("media_player.tv")

@@ -7,7 +7,11 @@
         "data": {
           "host": "TV IP address",
           "port": "MQTT port",
+          "power_on_mode": "Power on with",
           "power_on_button": "Power-on button",
+          "power_on_remote": "Infrared remote",
+          "power_on_command": "IR command",
+          "power_on_device": "IR device name",
           "mac": "TV Wi-Fi MAC",
           "name": "Name",
           "auth_mode": "Auth mode",
@@ -16,7 +20,11 @@
         },
         "data_description": {
           "host": "IPv4 of the E7N Pro. Give it a DHCP reservation.",
-          "power_on_button": "Home Assistant button / switch / script that physically turns the TV on (IR blaster key, smart plug, helper button). Turn-on calls button.press (or switch.turn_on). MQTT KEY_POWER cannot start a dead TV.",
+          "power_on_mode": "Each TV has its own wake method. Button presses a button, switch, or script. Infrared remote calls remote.send_command. Wake-on-LAN uses the Wi-Fi MAC. 爱家 cannot power the TV on.",
+          "power_on_button": "Used when power on is Button. button.press, or switch/script turn_on.",
+          "power_on_remote": "A remote entity (Broadlink, ESPHome, Harmony). Used when power on is Infrared remote.",
+          "power_on_command": "Command name stored on that remote, for example power or TV_POWER. Sent as remote.send_command.",
+          "power_on_device": "Optional device name, only for remotes that need it (Harmony).",
           "mac": "Optional. Wi-Fi MAC for Wake-on-LAN only. It is not the remote identity, and it is not a Bluetooth address.",
           "auth_mode": "auto tries modern VIDAA credentials first, then legacy static login.",
           "client_cert": "Leave empty to use a generated stand-in cert. If MQTT rc=5, extract the VIDAA/爱家 client cert (see docs)."
@@ -28,7 +36,8 @@
       "timeout": "The TV accepted TCP on 36669 but did not complete MQTT. Wait until the TV has finished booting, then try again.",
       "tls_failed": "Reached port 36669 but the TLS handshake failed. The integration now uses legacy ciphers and the 爱家 client certificate automatically — retry after a TV reboot. If it still fails, the TV may be serving plain MQTT; keep auth mode on auto.",
       "not_authorized": "MQTT connected but the TV rejected the login (rc=5). Keep auth mode on auto, set the TV clock/timezone correctly, and retry. Newer VIDAA firmware needs dynamic credentials; older firmware uses hisenseservice.",
-      "cannot_connect_ble": "Could not pair over Bluetooth. Enable Bluetooth on the Home Assistant machine (爱家 shows the same prompt) and confirm the TV BLE address."
+      "cannot_connect_ble": "Could not pair over Bluetooth. Enable Bluetooth on the Home Assistant machine (爱家 shows the same prompt) and confirm the TV BLE address.",
+      "power_on_required": "This power-on method needs the matching entity, IR command, or Wi-Fi MAC."
     },
     "abort": {
       "already_configured": "This TV is already configured.",
@@ -42,18 +51,27 @@
         "data": {
           "host": "TV IP address",
           "port": "MQTT port",
+          "power_on_mode": "Power on with",
           "power_on_button": "Power-on button",
+          "power_on_remote": "Infrared remote",
+          "power_on_command": "IR command",
+          "power_on_device": "IR device name",
           "mac": "TV Wi-Fi MAC",
           "name": "Name"
         },
         "data_description": {
-          "power_on_button": "Entity pressed when the TV is off. Aijia cannot power the TV on by itself.",
-          "mac": "Wi-Fi MAC for Wake-on-LAN. Leave blank if you do not use it."
+          "power_on_mode": "Button, infrared remote, or Wake-on-LAN. This setting is stored per TV.",
+          "power_on_button": "Entity pressed when the mode is Button.",
+          "power_on_remote": "remote entity used when the mode is Infrared remote.",
+          "power_on_command": "IR command name, for example power.",
+          "power_on_device": "Optional Harmony device name.",
+          "mac": "Wi-Fi MAC for Wake-on-LAN. Required when the mode is Wake-on-LAN."
         }
       }
     },
     "error": {
-      "cannot_connect_ble": "Invalid or unreachable TV Bluetooth address. Enable Bluetooth on the Home Assistant host and retry."
+      "cannot_connect_ble": "Invalid or unreachable TV Bluetooth address. Enable Bluetooth on the Home Assistant host and retry.",
+      "power_on_required": "This power-on method needs the matching entity, IR command, or Wi-Fi MAC."
     }
   },
   "entity": {
@@ -109,6 +127,15 @@
           "name": "App URL / id",
           "description": "Optional store url such as netflix."
         }
+      }
+    }
+  },
+  "selector": {
+    "power_on_mode": {
+      "options": {
+        "button": "Button, switch, or script",
+        "remote": "Infrared remote",
+        "wol": "Wake-on-LAN"
       }
     }
   }

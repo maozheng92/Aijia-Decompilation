@@ -229,9 +229,9 @@ E7N Pro 是 VIDAA 机。爱家添加家电会提示打开蓝牙（`flutter_blue_
 
 按键走机内 MQTT `:36669`。`sendkey` 的 topic 必须是本次连接的 client id，不能换成电视 Wi‑Fi MAC。爱家手机配对不需要 PIN；电视第一次授权这个客户端时，可能在屏幕上显示 4 位数字，用 `hisense_e7n.submit_code` 送回去。实现见 `custom_components/hisense_e7n` 与 [e7n-pro-homeassistant.md](e7n-pro-homeassistant.md)。
 
-**开机例外：** 爱家无法唤醒已完全关机的电视（机内 MQTT 不在线，`KEY_POWER` 发不出去）。HA 集成在电视离线时改为调用用户配置的 **button 设备**（红外电源键、智能插座、脚本），而不是走爱家。
+**开机例外：** 爱家无法唤醒已完全关机的电视（机内 MQTT 不在线，`KEY_POWER` 发不出去）。每台电视在集成里单独选择开机方式：HA 的 button / 开关 / 脚本，或一只红外 `remote` 的 `remote.send_command`，或 Wi-Fi MAC 网络唤醒。
 
-爱家云 `pushRemoter`、HiConnect 都不是 HA 的主路径：云要账号，HiConnect 是家电发现栈。红外只作为关机后的开机手段，接到 HA 的 button/switch/script 上。
+爱家云 `pushRemoter`、HiConnect 都不是 HA 的主路径：云要账号，HiConnect 是家电发现栈。红外只作为关机后的开机手段，接到 HA 的 remote 或 button 上。
 
 ## 8. 想对接自己电视时该看哪一层
 

@@ -33,39 +33,76 @@ from .const import (
     CONF_CLIENT_KEY,
     CONF_CLIENT_UUID,
     CONF_POWER_ON_BUTTON,
+    CONF_POWER_ON_COMMAND,
+    CONF_POWER_ON_DEVICE,
+    CONF_POWER_ON_MODE,
+    CONF_POWER_ON_REMOTE,
     CONF_USE_SSL,
     DEFAULT_AUTH_MODE,
     DEFAULT_NAME,
     DEFAULT_PORT,
+    DEFAULT_POWER_ON_COMMAND,
     DOMAIN,
+    POWER_ON_MODE_BUTTON,
 )
 from .credentials import random_client_uuid
-from .power import POWER_ON_DOMAINS, normalize_power_on_entity
+from .power import (
+    POWER_ON_DOMAINS,
+    POWER_ON_MODES,
+    clean_power_on_fields,
+    infer_power_on_mode,
+    normalize_power_on_entity,
+    power_on_form_errors,
+)
 from .tv_client import HisenseTvClient, classify_connect_error
 
 POWER_ON_BUTTON_SELECTOR = EntitySelector(
     EntitySelectorConfig(domain=list(POWER_ON_DOMAINS), multiple=False)
 )
-
-STEP_USER_DATA = vol.Schema(
-    {
-        vol.Required(CONF_HOST): TextSelector(TextSelectorConfig(type="text")),
-        vol.Optional(CONF_PORT, default=DEFAULT_PORT): vol.All(
-            vol.Coerce(int), vol.Range(min=1, max=65535)
-        ),
-        vol.Optional(CONF_POWER_ON_BUTTON): POWER_ON_BUTTON_SELECTOR,
-        vol.Optional(CONF_MAC): TextSelector(TextSelectorConfig(type="text")),
-        vol.Optional(CONF_NAME, default=DEFAULT_NAME): str,
-        vol.Optional(CONF_AUTH_MODE, default=DEFAULT_AUTH_MODE): SelectSelector(
-            SelectSelectorConfig(
-                options=AUTH_MODES,
-                mode=SelectSelectorMode.DROPDOWN,
-            )
-        ),
-        vol.Optional(CONF_CLIENT_CERT): str,
-        vol.Optional(CONF_CLIENT_KEY): str,
-    }
+POWER_ON_REMOTE_SELECTOR = EntitySelector(
+    EntitySelectorConfig(domain=["remote"], multiple=False)
 )
+POWER_ON_MODE_SELECTOR = SelectSelector(
+    SelectSelectorConfig(
+        options=list(POWER_ON_MODES),
+        mode=SelectSelectorMode.DROPDOWN,
+        translation_key="power_on_mode",
+    )
+)
+
+def _power_on_fields() -> dict[Any, Any]:
+    """Fresh markers. The same vol.Optional object must not be reused across schemas."""
+    return {
+        vol.Optional(CONF_POWER_ON_MODE, default=POWER_ON_MODE_BUTTON): POWER_ON_MODE_SELECTOR,
+        vol.Optional(CONF_POWER_ON_BUTTON): POWER_ON_BUTTON_SELECTOR,
+        vol.Optional(CONF_POWER_ON_REMOTE): POWER_ON_REMOTE_SELECTOR,
+        vol.Optional(CONF_POWER_ON_COMMAND, default=DEFAULT_POWER_ON_COMMAND): TextSelector(
+            TextSelectorConfig(type="text")
+        ),
+        vol.Optional(CONF_POWER_ON_DEVICE): TextSelector(TextSelectorConfig(type="text")),
+    }
+
+
+def _user_schema() -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(CONF_HOST): TextSelector(TextSelectorConfig(type="text")),
+            vol.Optional(CONF_PORT, default=DEFAULT_PORT): vol.All(
+                vol.Coerce(int), vol.Range(min=1, max=65535)
+            ),
+            **_power_on_fields(),
+            vol.Optional(CONF_MAC): TextSelector(TextSelectorConfig(type="text")),
+            vol.Optional(CONF_NAME, default=DEFAULT_NAME): str,
+            vol.Optional(CONF_AUTH_MODE, default=DEFAULT_AUTH_MODE): SelectSelector(
+                SelectSelectorConfig(
+                    options=AUTH_MODES,
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(CONF_CLIENT_CERT): str,
+            vol.Optional(CONF_CLIENT_KEY): str,
+        }
+    )
 
 
 class HisenseE7NConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -79,6 +116,14 @@ class HisenseE7NConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
+            form_errors = power_on_form_errors(user_input)
+            if form_errors:
+                return self.async_show_form(
+                    step_id="user",
+                    data_schema=self.add_suggested_values_to_schema(_user_schema(), user_input),
+                    errors=form_errors,
+                )
+            user_input = clean_power_on_fields(user_input)
             host = user_input[CONF_HOST].strip()
             port = int(user_input.get(CONF_PORT, DEFAULT_PORT))
             uuid = random_client_uuid()
@@ -129,10 +174,12 @@ class HisenseE7NConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_HOST: host,
                     CONF_PORT: port,
                     CONF_MAC: (user_input.get(CONF_MAC) or "").strip(),
-                    CONF_POWER_ON_BUTTON: normalize_power_on_entity(
-                        user_input.get(CONF_POWER_ON_BUTTON)
-                    )
-                    or "",
+                    CONF_POWER_ON_MODE: user_input.get(CONF_POWER_ON_MODE, POWER_ON_MODE_BUTTON),
+                    CONF_POWER_ON_BUTTON: user_input.get(CONF_POWER_ON_BUTTON) or "",
+                    CONF_POWER_ON_REMOTE: user_input.get(CONF_POWER_ON_REMOTE) or "",
+                    CONF_POWER_ON_COMMAND: user_input.get(CONF_POWER_ON_COMMAND)
+                    or DEFAULT_POWER_ON_COMMAND,
+                    CONF_POWER_ON_DEVICE: user_input.get(CONF_POWER_ON_DEVICE) or "",
                     CONF_NAME: user_input.get(CONF_NAME) or DEFAULT_NAME,
                     CONF_AUTH_MODE: user_input.get(CONF_AUTH_MODE, DEFAULT_AUTH_MODE),
                     CONF_CLIENT_UUID: uuid,
@@ -149,9 +196,9 @@ class HisenseE7NConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await client.async_disconnect()
             self._client = None
 
-        schema = STEP_USER_DATA
+        schema = _user_schema()
         if user_input:
-            schema = self.add_suggested_values_to_schema(STEP_USER_DATA, user_input)
+            schema = self.add_suggested_values_to_schema(schema, user_input)
         return self.async_show_form(
             step_id="user",
             data_schema=schema,
@@ -171,7 +218,7 @@ class HisenseE7NConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class HisenseE7NOptionsFlow(config_entries.OptionsFlow):
-    """Tune host, BLE address, power-on button, and MAC without re-pairing."""
+    """Tune host, power-on method, and MAC without re-pairing."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry | None = None) -> None:
         if config_entry is not None:
@@ -180,35 +227,63 @@ class HisenseE7NOptionsFlow(config_entries.OptionsFlow):
     def _entry(self) -> config_entries.ConfigEntry:
         return getattr(self, "_config_entry", None) or self.config_entry
 
-    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        data = {**self._entry().data, **self._entry().options}
-        if user_input is not None:
-            if CONF_POWER_ON_BUTTON in user_input:
-                user_input[CONF_POWER_ON_BUTTON] = (
-                    normalize_power_on_entity(user_input.get(CONF_POWER_ON_BUTTON)) or ""
-                )
-            else:
-                user_input[CONF_POWER_ON_BUTTON] = (
-                    normalize_power_on_entity(data.get(CONF_POWER_ON_BUTTON)) or ""
-                )
-            return self.async_create_entry(title="", data=user_input)
-
-        schema = vol.Schema(
+    def _options_schema(self, data: dict[str, Any]) -> vol.Schema:
+        return vol.Schema(
             {
                 vol.Required(CONF_HOST, default=data.get(CONF_HOST, "")): str,
                 vol.Optional(CONF_PORT, default=data.get(CONF_PORT, DEFAULT_PORT)): vol.All(
                     vol.Coerce(int), vol.Range(min=1, max=65535)
                 ),
-                vol.Optional(CONF_POWER_ON_BUTTON): POWER_ON_BUTTON_SELECTOR,
+                **_power_on_fields(),
                 vol.Optional(CONF_MAC, default=data.get(CONF_MAC, "")): str,
                 vol.Optional(CONF_NAME, default=data.get(CONF_NAME, DEFAULT_NAME)): str,
             }
         )
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        data = {**self._entry().data, **self._entry().options}
+        if user_input is not None:
+            merged = {**data, **user_input}
+            form_errors = power_on_form_errors(merged)
+            if form_errors:
+                return self.async_show_form(
+                    step_id="init",
+                    data_schema=self.add_suggested_values_to_schema(
+                        self._options_schema(data), merged
+                    ),
+                    errors=form_errors,
+                )
+            cleaned = clean_power_on_fields(merged)
+            return self.async_create_entry(
+                title="",
+                data={
+                    CONF_HOST: str(cleaned.get(CONF_HOST, "")).strip(),
+                    CONF_PORT: int(cleaned.get(CONF_PORT, DEFAULT_PORT)),
+                    CONF_MAC: (cleaned.get(CONF_MAC) or "").strip(),
+                    CONF_NAME: cleaned.get(CONF_NAME) or DEFAULT_NAME,
+                    CONF_POWER_ON_MODE: cleaned[CONF_POWER_ON_MODE],
+                    CONF_POWER_ON_BUTTON: cleaned.get(CONF_POWER_ON_BUTTON) or "",
+                    CONF_POWER_ON_REMOTE: cleaned.get(CONF_POWER_ON_REMOTE) or "",
+                    CONF_POWER_ON_COMMAND: cleaned.get(CONF_POWER_ON_COMMAND)
+                    or DEFAULT_POWER_ON_COMMAND,
+                    CONF_POWER_ON_DEVICE: cleaned.get(CONF_POWER_ON_DEVICE) or "",
+                },
+            )
+
+        schema = self._options_schema(data)
         suggested = dict(data)
         if user_input:
             suggested.update(user_input)
         if not normalize_power_on_entity(suggested.get(CONF_POWER_ON_BUTTON)):
             suggested.pop(CONF_POWER_ON_BUTTON, None)
+        if not normalize_power_on_entity(suggested.get(CONF_POWER_ON_REMOTE)):
+            suggested.pop(CONF_POWER_ON_REMOTE, None)
+        suggested[CONF_POWER_ON_MODE] = infer_power_on_mode(
+            suggested.get(CONF_POWER_ON_MODE),
+            suggested.get(CONF_POWER_ON_BUTTON),
+            suggested.get(CONF_POWER_ON_REMOTE),
+            suggested.get(CONF_MAC),
+        )
         return self.async_show_form(
             step_id="init",
             data_schema=self.add_suggested_values_to_schema(schema, suggested),

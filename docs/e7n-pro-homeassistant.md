@@ -10,8 +10,8 @@ E7N Pro 是 **VIDAA** 智能电视（国内与爱家 App 配套）。爱家添�
 | 爱家云 `pushRemoter` / `devices/execute` | 手机 App 远程 | 要账号 token，不适合本地集成 |
 | 爱家「打开蓝牙」 | 添加空调等家电 | 不是 E7N 遥控，集成不再要求蓝牙地址 |
 | HiConnect UDP `229.x.x.x` + TCP/AES | 爱家同网发现/家电控制 | 家电通用栈，本集成不走 |
-| 红外 `TRANSMIT_IR` | 手机有红外 | 不走手机红外；HA 侧用红外宝/插座的 **button** 开机 |
-| Wake-on-LAN | 部分机型网络待机 | 仅当未配置开机按钮时的可选回退 |
+| 红外 `TRANSMIT_IR` | 手机有红外 | 不走手机红外；每台电视可把开机设成 HA 的 **button** 或 **remote.send_command** |
+| Wake-on-LAN | 部分机型网络待机 | 开机方式选「网络唤醒」且填了 Wi-Fi MAC 时使用 |
 
 爱家 APK 里的 `sendKeyByMqtt`、`tryPushLocalRemoter`、`{"key":"KEY_POWER"}` 与 VIDAA topic
 
@@ -32,8 +32,8 @@ E7N Pro（以及同代 E7N / E7NQ Pro）固件在 2024 之后通常还要：
 
 `custom_components/hisense_e7n`：
 
-- `media_player`：开关、音量、静音、输入源、播放/暂停；**关机后开机调用配置的 button 设备**（`button.press` / `switch.turn_on` / `script.turn_on`），不指望爱家 `KEY_POWER`
-- `remote`：发送 `KEY_*`（可用 Universal Remote Card）；关机状态下的电源键同样走开机按钮
+- `media_player`：开关、音量、静音、输入源、应用浏览、上一台/下一台；**关机后开机按这台电视自己的开机方式**（按钮、红外遥控或网络唤醒），不指望爱家 `KEY_POWER`
+- `remote`：发送 `KEY_*`（可用 Universal Remote Card）；关机状态下的电源键走同一套开机方式
 - `button`：爱家「电视」遥控页同款按键（电源、音量、截屏、信号源、AI识图、设置、方向键、OK、返回、首页、菜单）。「切换遥控模式」和底部语音是手机 App 能力，不映射成电视键
 - 配置流：填 IP 即可。不需要蓝牙地址。若电视屏幕弹出 4 位数字，调用 `hisense_e7n.submit_code`
 - `iot_class: local_push`，不经过海信云
@@ -44,7 +44,10 @@ E7N Pro（以及同代 E7N / E7NQ Pro）固件在 2024 之后通常还要：
 2. 重启 Home Assistant。
 3. **设置 → 设备与服务 → 添加集成 → Hisense E7N Pro**。
 4. 电视保持开机，填 IP。**不用找蓝牙 MAC。** Wi‑Fi MAC 可以留空，只在要用网络唤醒时再填。
-5. **开机按钮**选一个能物理打开电视的实体（红外开机键、智能插座、辅助按钮、脚本）。爱家 App 无法开机。
+5. **开机方式**按这台电视选择。爱家 App 无法开机。
+   - **按钮、开关或脚本**：选一个能物理打开电视的实体（智能插座、辅助按钮、脚本）。
+   - **红外遥控**：选一个 `remote` 实体（Broadlink、ESPHome、Harmony），并填写它里面保存的开机指令名，例如 `power`。Harmony 还可以填设备名。
+   - **网络唤醒**：填写电视 Wi-Fi MAC。
 6. 爱家手机配对不需要 PIN。若 HA 通知「电视屏幕上出现了 4 位数字」，那是电视在授权这个新遥控，把数字填进服务 `hisense_e7n.submit_code`。
 7. 已添加的集成更新后会自己换成新的客户端身份，不用重填蓝牙地址。
 
@@ -54,9 +57,9 @@ HACS：把本仓库加为自定义仓库（类别 Integration）。
 
 - 设置里打开手机遥控 / 网络控制 / 爱家控制
 - 给电视做 **DHCP 地址预留**
-- 准备一个真正能开机的 HA 实体（红外发射器的电源 button、切断待机供电的智能插座、或封装红外的 script）
+- 准备一种真正能开机的方式：红外遥控的 `remote` 实体、智能插座、辅助按钮，或网络唤醒 MAC
 - Home Assistant 与电视同一二层网络，放行 **TCP 36669**
-- 关机走 MQTT `KEY_POWER`；完全断电后只能按开机按钮
+- 关机走 MQTT `KEY_POWER`；完全断电后只能用上面配置的开机方式
 
 ## 服务
 
@@ -81,7 +84,7 @@ data:
 
 | 爱家按钮 | HA 实体 / 命令 |
 |---|---|
-| 电源 | `button.…_power` → `KEY_POWER`（电视离线时改按你配置的开机按钮） |
+| 电源 | `button.…_power` → `KEY_POWER`（电视离线时改走这台电视的开机方式） |
 | 音量 − / 静音 / 音量 + | `KEY_VOLUMEDOWN` / `KEY_MUTE` / `KEY_VOLUMEUP` |
 | 截屏 | `button.…_screenshot` → 爱家 `captureTvScreen` / `getTvScreenInfo` |
 | 信号源 | `button.…_source` → 刷新 `sourcelist` + `KEY_SOURCE` |
@@ -115,30 +118,30 @@ python3 scripts/extract_vidaa_certs.py
 
 ## 开机为什么不用爱家
 
-电视完全关机后，`:36669` MQTT 不在线，爱家发 `KEY_POWER` 没有落地通道。本集成的 `media_player.turn_on` / 遥控器电源键在 `available=false` 时：
+电视完全关机后，`:36669` MQTT 不在线，爱家发 `KEY_POWER` 没有落地通道。每台电视在添加或选项里单独保存开机方式。`media_player.turn_on`、遥控器电源键、电源按钮在电视离线时只调用这一种方式，不会按钮和红外一起发（避免按两次把刚打开的电视又关掉）。
 
-1. 调用你配置的开机实体：`button.press`、`input_button.press`、`switch.turn_on` 或 `script.turn_on`
-2. 等待电视起来后再连 MQTT
-3. 仅当未配置该实体且填了 MAC 时，才回退 Wake-on-LAN
+| 开机方式 | 实际调用 |
+|---|---|
+| 按钮、开关或脚本 | `button.press` / `input_button.press` / `switch.turn_on` / `script.turn_on` |
+| 红外遥控 | `remote.send_command`，`command` 是指令名列表。可选 `device`（Harmony） |
+| 网络唤醒 | 向填写的 Wi-Fi MAC 发 Wake-on-LAN |
 
-示例：用红外宝的电源键
+调用之后等待电视的 MQTT 起来。
+
+红外示例（Broadlink 里已学习的指令名叫 `power`）：
 
 ```yaml
-# 集成选项里选择
-power_on_button: button.living_room_ir_tv_power
+# 集成选项
+power_on_mode: remote
+power_on_remote: remote.living_room_broadlink
+power_on_command: power
 ```
 
-或包一层脚本再绑到集成：
+按钮示例：
 
 ```yaml
-script:
-  hisense_e7n_power_on:
-    sequence:
-      - service: remote.send_command
-        target:
-          entity_id: remote.broadlink
-        data:
-          command: tv_power
+power_on_mode: button
+power_on_button: button.living_room_ir_tv_power
 ```
 
 ## 和爱家云的关系
@@ -147,7 +150,7 @@ script:
 
 ## 按键仍无反应
 
-1. 确认集成已更新到 1.4.2 并重启。旧版本把电视 Wi‑Fi MAC 当成遥控身份，电视会丢掉按键。
+1. 确认集成已更新到 1.5.0 并重启。1.4.2 起按键只发给当前 MQTT client id；旧版本把电视 Wi‑Fi MAC 当成遥控身份，电视会丢掉按键。
 2. 电视需已开机，和 HA 同一局域网。
 3. 若屏幕或 HA 通知里出现 4 位数字：
 

@@ -7,10 +7,13 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.components.media_player import (
+    BrowseMedia,
+    MediaClass,
     MediaPlayerDeviceClass,
     MediaPlayerEntity,
     MediaPlayerEntityFeature,
     MediaPlayerState,
+    MediaType,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -21,7 +24,15 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DATA_COORDINATOR, DOMAIN
 from .coordinator import HisenseTvCoordinator
 from .entity import HisenseTvEntity
-from .keys import KEY_PAUSE, KEY_PLAY, KEY_STOP, KEY_VOLUMEDOWN, KEY_VOLUMEUP
+from .keys import (
+    KEY_CHANNELDOWN,
+    KEY_CHANNELUP,
+    KEY_PAUSE,
+    KEY_PLAY,
+    KEY_STOP,
+    KEY_VOLUMEDOWN,
+    KEY_VOLUMEUP,
+)
 
 SUPPORT = (
     MediaPlayerEntityFeature.TURN_ON
@@ -33,6 +44,9 @@ SUPPORT = (
     | MediaPlayerEntityFeature.PLAY
     | MediaPlayerEntityFeature.PAUSE
     | MediaPlayerEntityFeature.STOP
+    | MediaPlayerEntityFeature.NEXT_TRACK
+    | MediaPlayerEntityFeature.PREVIOUS_TRACK
+    | MediaPlayerEntityFeature.BROWSE_MEDIA
 )
 
 
@@ -91,6 +105,10 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
         return (self.coordinator.data or self.coordinator.client.state).muted
 
     @property
+    def media_title(self) -> str | None:
+        return self.source
+
+    @property
     def source(self) -> str | None:
         tv = self.coordinator.data or self.coordinator.client.state
         return tv.source_name
@@ -134,6 +152,90 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
     async def async_media_stop(self) -> None:
         await self.coordinator.client.async_send_key(KEY_STOP)
 
+    async def async_media_next_track(self) -> None:
+        await self.coordinator.client.async_send_key(KEY_CHANNELUP)
+
+    async def async_media_previous_track(self) -> None:
+        await self.coordinator.client.async_send_key(KEY_CHANNELDOWN)
+
+    async def async_browse_media(
+        self,
+        media_content_type: str | None = None,
+        media_content_id: str | None = None,
+    ) -> BrowseMedia:
+        tv = self.coordinator.data or self.coordinator.client.state
+        if media_content_id in (None, "root"):
+            return BrowseMedia(
+                title=self.coordinator.device_name,
+                media_class=MediaClass.DIRECTORY,
+                media_content_id="root",
+                media_content_type="root",
+                can_play=False,
+                can_expand=True,
+                children=[
+                    _folder("Sources", "sources"),
+                    _folder("Apps", "apps"),
+                ],
+            )
+        if media_content_id == "sources":
+            children = [
+                BrowseMedia(
+                    title=str(item.get("name") or item.get("id")),
+                    media_class=MediaClass.CHANNEL,
+                    media_content_id=f"source:{item.get('id')}",
+                    media_content_type=MediaType.CHANNEL,
+                    can_play=True,
+                    can_expand=False,
+                )
+                for item in tv.sources
+                if item.get("name") or item.get("id")
+            ]
+            return _folder("Sources", "sources", children)
+        children = []
+        for app in tv.apps:
+            name = app.get("name") or app.get("appName")
+            url = app.get("url") or app.get("appId") or app.get("id") or name
+            if not name:
+                continue
+            children.append(
+                BrowseMedia(
+                    title=str(name),
+                    media_class=MediaClass.APP,
+                    media_content_id=f"app:{url}",
+                    media_content_type=MediaType.APP,
+                    can_play=True,
+                    can_expand=False,
+                )
+            )
+        return _folder("Apps", "apps", children)
+
+    async def async_play_media(self, media_type: str, media_id: str, **kwargs: Any) -> None:
+        tv = self.coordinator.client.state
+        if media_type == MediaType.APP and not str(media_id).startswith("app:"):
+            await self.coordinator.client.async_launch_app(media_id, kwargs.get("url"))
+            return
+        if media_id.startswith("source:"):
+            source_id = media_id.split(":", 1)[1]
+            for item in tv.sources:
+                if str(item.get("id")) == source_id:
+                    await self.coordinator.client.async_change_source(
+                        item["id"], str(item.get("name") or source_id)
+                    )
+                    return
+        if media_id.startswith("app:"):
+            url = media_id.split(":", 1)[1]
+            for app in tv.apps:
+                app_url = app.get("url") or app.get("appId") or app.get("id") or ""
+                name = app.get("name") or app.get("appName") or url
+                if str(app_url) == url or str(name) == url:
+                    await self.coordinator.client.async_launch_app(
+                        str(name), str(app_url) if app_url else None
+                    )
+                    return
+            await self.coordinator.client.async_launch_app(url, url)
+            return
+        await self.async_select_source(media_id)
+
     async def async_select_source(self, source: str) -> None:
         tv = self.coordinator.client.state
         for item in tv.sources:
@@ -158,4 +260,17 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
             "statetype": tv.statetype,
             "auth_mode": tv.auth_mode,
             "source_id": tv.source_id,
+            "power_on_mode": self.coordinator.power_on_mode,
         }
+
+
+def _folder(title: str, content_id: str, children: list[BrowseMedia] | None = None) -> BrowseMedia:
+    return BrowseMedia(
+        title=title,
+        media_class=MediaClass.DIRECTORY,
+        media_content_id=content_id,
+        media_content_type=content_id,
+        can_play=False,
+        can_expand=True,
+        children=children or [],
+    )

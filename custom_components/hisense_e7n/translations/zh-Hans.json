@@ -7,7 +7,11 @@
         "data": {
           "host": "电视 IP",
           "port": "MQTT 端口",
+          "power_on_mode": "开机方式",
           "power_on_button": "开机按钮",
+          "power_on_remote": "红外遥控",
+          "power_on_command": "红外指令",
+          "power_on_device": "红外设备名",
           "mac": "电视 Wi-Fi MAC",
           "name": "名称",
           "auth_mode": "认证模式",
@@ -16,7 +20,11 @@
         },
         "data_description": {
           "host": "给 E7N Pro 做 DHCP 地址预留，避免 IP 变化。",
-          "power_on_button": "选择一个能物理开机的 Home Assistant 实体：红外开机键、智能插座、辅助按钮或脚本。关机后开机调用 button.press（插座则 switch.turn_on），不再指望爱家/MQTT 的 KEY_POWER。",
+          "power_on_mode": "每台电视单独保存。按钮会按下按钮、开关或脚本；红外遥控会调用 remote.send_command；网络唤醒使用 Wi-Fi MAC。爱家无法开机。",
+          "power_on_button": "开机方式选「按钮」时使用。button.press，插座或脚本则 turn_on。",
+          "power_on_remote": "开机方式选「红外遥控」时使用，选一个 remote 实体（Broadlink、ESPHome、Harmony）。",
+          "power_on_command": "这只遥控里保存的指令名，例如 power 或 TV_POWER。会作为 remote.send_command 发出。",
+          "power_on_device": "可选。只有 Harmony 这类遥控需要设备名时再填。",
           "mac": "可选。只用于 Wake-on-LAN，不是遥控身份，也不是蓝牙地址。",
           "auth_mode": "auto 会先试新固件动态凭证，再回退旧固件静态账号。",
           "client_cert": "留空则使用生成的占位证书。若 MQTT 返回 rc=5，请按文档放入爱家/VIDAA 客户端证书。"
@@ -28,7 +36,8 @@
       "timeout": "36669 端口能通，但电视没有完成 MQTT 握手。请等电视完全进入桌面后再添加。",
       "tls_failed": "已连上 36669，但 TLS 握手失败。集成会自动使用旧加密套件和爱家里的客户端证书，请重启电视后再试。若仍失败，部分固件是明文 MQTT，认证模式保持 auto 即可。",
       "not_authorized": "MQTT 已接通，但账号被拒绝（rc=5）。请保持认证模式 auto，并把电视时间/时区设正确后重试。新固件用动态凭证，旧固件用 hisenseservice。",
-      "cannot_connect_ble": "蓝牙配对失败。请打开 Home Assistant 所在机器的蓝牙（爱家添加电视同样会提示开蓝牙），并确认电视蓝牙地址。"
+      "cannot_connect_ble": "蓝牙配对失败。请打开 Home Assistant 所在机器的蓝牙（爱家添加电视同样会提示开蓝牙），并确认电视蓝牙地址。",
+      "power_on_required": "当前开机方式还缺对应的实体、红外指令或 Wi-Fi MAC。"
     },
     "abort": {
       "already_configured": "这台电视已经添加过了。",
@@ -42,18 +51,27 @@
         "data": {
           "host": "电视 IP",
           "port": "MQTT 端口",
+          "power_on_mode": "开机方式",
           "power_on_button": "开机按钮",
+          "power_on_remote": "红外遥控",
+          "power_on_command": "红外指令",
+          "power_on_device": "红外设备名",
           "mac": "电视 Wi-Fi MAC",
           "name": "名称"
         },
         "data_description": {
-          "power_on_button": "电视关机后按下的实体。爱家本身无法开机。",
-          "mac": "只用于网络唤醒，可以留空。"
+          "power_on_mode": "按钮、红外遥控或网络唤醒。这个设置保存在每台电视上。",
+          "power_on_button": "开机方式为按钮时按下的实体。",
+          "power_on_remote": "开机方式为红外遥控时使用的 remote 实体。",
+          "power_on_command": "红外指令名，例如 power。",
+          "power_on_device": "可选，Harmony 的设备名。",
+          "mac": "开机方式为网络唤醒时必填。其他方式可以留空。"
         }
       }
     },
     "error": {
-      "cannot_connect_ble": "电视蓝牙地址无效或连不上。请打开 Home Assistant 主机蓝牙后重试。"
+      "cannot_connect_ble": "电视蓝牙地址无效或连不上。请打开 Home Assistant 主机蓝牙后重试。",
+      "power_on_required": "当前开机方式还缺对应的实体、红外指令或 Wi-Fi MAC。"
     }
   },
   "entity": {
@@ -109,6 +127,15 @@
           "name": "应用 URL / id",
           "description": "可选，例如 netflix。"
         }
+      }
+    }
+  },
+  "selector": {
+    "power_on_mode": {
+      "options": {
+        "button": "按钮、开关或脚本",
+        "remote": "红外遥控",
+        "wol": "网络唤醒"
       }
     }
   }

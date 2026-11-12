@@ -17,6 +17,10 @@ from .const import (
     CONF_CLIENT_KEY,
     CONF_CLIENT_UUID,
     CONF_POWER_ON_BUTTON,
+    CONF_POWER_ON_COMMAND,
+    CONF_POWER_ON_DEVICE,
+    CONF_POWER_ON_MODE,
+    CONF_POWER_ON_REMOTE,
     CONF_USE_SSL,
     DATA_CLIENT,
     DATA_COORDINATOR,
@@ -64,6 +68,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         use_ssl = use_ssl.lower() in {"1", "true", "yes"}
 
     power_on_button = normalize_power_on_entity(data.get(CONF_POWER_ON_BUTTON))
+    power_on_remote = normalize_power_on_entity(data.get(CONF_POWER_ON_REMOTE))
     client = HisenseTvClient(
         host,
         port=port,
@@ -82,13 +87,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except ConnectionError as err:
         # Broker is down when the TV is fully off; still load if we can press
         # a power-on button or fall back to Wake-on-LAN.
-        if not power_on_button and not data.get(CONF_MAC):
+        if not power_on_button and not power_on_remote and not data.get(CONF_MAC):
             raise ConfigEntryNotReady(f"Cannot reach Hisense TV at {host}:{port}") from err
         _LOGGER.warning(
             "TV at %s:%s is offline; turn-on will call %s (%s)",
             host,
             port,
-            power_on_button or data.get(CONF_MAC),
+            power_on_button or power_on_remote or data.get(CONF_MAC),
             err,
         )
 
@@ -97,6 +102,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         client,
         data.get(CONF_NAME, host),
         power_on_button=power_on_button,
+    )
+    coordinator.configure_power_on(
+        mode=data.get(CONF_POWER_ON_MODE),
+        button=power_on_button,
+        remote=power_on_remote,
+        command=data.get(CONF_POWER_ON_COMMAND),
+        device=data.get(CONF_POWER_ON_DEVICE),
+        mac=data.get(CONF_MAC),
     )
     await coordinator.async_config_entry_first_refresh()
 
