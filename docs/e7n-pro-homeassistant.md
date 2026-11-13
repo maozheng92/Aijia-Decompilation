@@ -73,9 +73,7 @@ data:
   key: KEY_HOME
 ```
 
-媒体播放器里的「我的应用」对应爱家「电视应用 → 我的应用」。打开目录时会向电视请求 MQTT `applist`，并等待几秒再展示。点选一项时优先走本机「电视打开」：`POST http://电视IP:7779/..pushsmartju`（`startupType` 4 + `packageName`），MQTT `launchapp` 只作回退。
-
-爱家里带安装体积（如 `51.45M`）的那份列表来自「电视应用」H5（功能码 `16005007` / `dsyy`，布局里的 `formalWebUrl` + `deviceIp`）。手机 APK 里没有这份列表接口；云端 layout 又要账号签名。所以当前能稳定复现的是：有 MQTT `applist` 时填目录，有 Android 包名时用本机打开。
+打开应用用 `launch_app`（有 Android 包名时优先本机 `/..pushsmartju`，否则 MQTT `launchapp`）：
 
 ```yaml
 service: hisense_e7n.launch_app

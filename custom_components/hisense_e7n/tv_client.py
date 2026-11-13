@@ -869,7 +869,7 @@ class HisenseTvClient:
         )
 
     async def async_refresh_apps(self, wait: float = 3.0) -> None:
-        """Request applist and wait briefly so browse_media sees the reply."""
+        """Request applist and wait briefly for the reply."""
         loop = asyncio.get_running_loop()
         self._apps_event = asyncio.Event()
         before = list(self.state.apps)

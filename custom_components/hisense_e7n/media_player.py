@@ -7,13 +7,10 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.components.media_player import (
-    BrowseMedia,
-    MediaClass,
     MediaPlayerDeviceClass,
     MediaPlayerEntity,
     MediaPlayerEntityFeature,
     MediaPlayerState,
-    MediaType,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -47,7 +44,6 @@ SUPPORT = (
     | MediaPlayerEntityFeature.STOP
     | MediaPlayerEntityFeature.NEXT_TRACK
     | MediaPlayerEntityFeature.PREVIOUS_TRACK
-    | MediaPlayerEntityFeature.BROWSE_MEDIA
 )
 
 
@@ -159,102 +155,6 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
     async def async_media_previous_track(self) -> None:
         await self.coordinator.client.async_send_key(KEY_CHANNELDOWN)
 
-    async def async_browse_media(
-        self,
-        media_content_type: str | None = None,
-        media_content_id: str | None = None,
-    ) -> BrowseMedia:
-        if media_content_id in (None, "root", "apps"):
-            await self.coordinator.client.async_refresh_apps()
-        tv = self.coordinator.data or self.coordinator.client.state
-        if media_content_id in (None, "root"):
-            return BrowseMedia(
-                title=self.coordinator.device_name,
-                media_class=MediaClass.DIRECTORY,
-                media_content_id="root",
-                media_content_type="root",
-                can_play=False,
-                can_expand=True,
-                children=[
-                    _folder("Sources", "sources"),
-                    _folder("我的应用", "apps"),
-                ],
-            )
-        if media_content_id == "sources":
-            children = [
-                BrowseMedia(
-                    title=str(item.get("name") or item.get("id")),
-                    media_class=MediaClass.CHANNEL,
-                    media_content_id=f"source:{item.get('id')}",
-                    media_content_type=MediaType.CHANNEL,
-                    can_play=True,
-                    can_expand=False,
-                )
-                for item in tv.sources
-                if item.get("name") or item.get("id")
-            ]
-            return _folder("Sources", "sources", children)
-        children = []
-        for app in tv.apps:
-            title = format_app_title(app)
-            url = app.get("package") or app.get("url") or app.get("app_id") or app.get("name")
-            if not title or not url:
-                continue
-            children.append(
-                BrowseMedia(
-                    title=title,
-                    media_class=MediaClass.APP,
-                    media_content_id=f"app:{url}",
-                    media_content_type=MediaType.APP,
-                    can_play=True,
-                    can_expand=False,
-                    thumbnail=str(app["icon"]) if app.get("icon") else None,
-                )
-            )
-        return _folder("我的应用", "apps", children)
-
-    async def async_play_media(self, media_type: str, media_id: str, **kwargs: Any) -> None:
-        tv = self.coordinator.client.state
-        if media_type == MediaType.APP and not str(media_id).startswith("app:"):
-            await self.coordinator.client.async_launch_app(media_id, kwargs.get("url"))
-            return
-        if media_type in {MediaType.CHANNEL, "channel"} and not str(media_id).startswith(
-            ("source:", "app:")
-        ):
-            await self.coordinator.client.async_change_channel(media_id)
-            return
-        if media_id.startswith("source:"):
-            source_id = media_id.split(":", 1)[1]
-            for item in tv.sources:
-                if str(item.get("id")) == source_id:
-                    await self.coordinator.client.async_change_source(
-                        item["id"], str(item.get("name") or source_id)
-                    )
-                    return
-        if media_id.startswith("app:"):
-            url = media_id.split(":", 1)[1]
-            for app in tv.apps:
-                app_url = app.get("url") or app.get("app_id") or ""
-                package = str(app.get("package") or "")
-                name = app.get("name") or url
-                if (
-                    str(app_url) == url
-                    or str(name) == url
-                    or package == url
-                    or str(app.get("app_id") or "") == url
-                ):
-                    await self.coordinator.client.async_launch_app(
-                        str(name),
-                        str(app_url) if app_url else None,
-                        int(app.get("url_type") or 37),
-                        int(app.get("store_type") or 0),
-                        package or None,
-                    )
-                    return
-            await self.coordinator.client.async_launch_app(url, url)
-            return
-        await self.async_select_source(media_id)
-
     async def async_select_source(self, source: str) -> None:
         tv = self.coordinator.client.state
         for item in tv.sources:
@@ -289,15 +189,3 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
             "power_on_mode": self.coordinator.power_on_mode,
             "apps": [format_app_title(app) for app in tv.apps if format_app_title(app)],
         }
-
-
-def _folder(title: str, content_id: str, children: list[BrowseMedia] | None = None) -> BrowseMedia:
-    return BrowseMedia(
-        title=title,
-        media_class=MediaClass.DIRECTORY,
-        media_content_id=content_id,
-        media_content_type=content_id,
-        can_play=False,
-        can_expand=True,
-        children=children or [],
-    )
