@@ -73,6 +73,8 @@ data:
   key: KEY_HOME
 ```
 
+媒体播放器里的「我的应用」是这台电视已经安装的应用，和爱家「电视应用 → 我的应用」是同一份列表。连上电视或打开这个目录时，会向电视请求 `applist`。
+
 ```yaml
 service: hisense_e7n.launch_app
 target:

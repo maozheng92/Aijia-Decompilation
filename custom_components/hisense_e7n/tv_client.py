@@ -19,6 +19,7 @@ from typing import Any
 import paho.mqtt.client as mqtt
 
 from . import topics
+from .apps import normalize_apps
 from .certs_util import build_ssl_context
 from .const import (
     DEFAULT_PORT,
@@ -311,12 +312,7 @@ class HisenseTvClient:
             self.state.sources = sources
 
     def _apply_apps(self, data: Any) -> None:
-        items = data
-        if isinstance(data, dict):
-            items = data.get("app_list") or data.get("applist") or data.get("list") or []
-        if not isinstance(items, list):
-            return
-        apps = [item for item in items if isinstance(item, dict)]
+        apps = normalize_apps(data)
         if apps:
             self.state.apps = apps
 
@@ -355,7 +351,7 @@ class HisenseTvClient:
             self._apply_state(data)
         elif topic.endswith("/data/sourcelist"):
             self._apply_sources(data)
-        elif topic.endswith("/data/applist"):
+        elif "applist" in topic:
             self._apply_apps(data)
         elif "volume" in topic:
             self._apply_volume(data)
@@ -709,10 +705,29 @@ class HisenseTvClient:
             payload["sourcename"] = source_name
         self._publish_action("ui_service", "changesource", payload)
 
-    def launch_app(self, name: str, url: str | None = None) -> None:
+    def launch_app(
+        self,
+        name: str,
+        url: str | None = None,
+        url_type: int = 37,
+        store_type: int = 0,
+    ) -> None:
         app_url = url or name
-        payload = {"appId": app_url, "name": name, "url": app_url}
+        payload = {
+            "name": name,
+            "url": app_url,
+            "appId": app_url,
+            "urlType": int(url_type),
+            "storeType": int(store_type),
+        }
         self._publish_action("ui_service", "launchapp", payload)
+
+    def refresh_apps(self) -> None:
+        """Ask the TV for 我的应用. The reply arrives on the applist data topic."""
+        try:
+            self._publish_action("ui_service", "applist", "")
+        except RuntimeError:
+            _LOGGER.debug("Cannot request the TV app list", exc_info=True)
 
     def change_channel(self, channel_param: str) -> None:
         self._publish_action(
@@ -724,6 +739,7 @@ class HisenseTvClient:
     def refresh_status(self) -> None:
         self._publish_action("ui_service", "gettvstate", "")
         self._publish_action("platform_service", "getvolume", "")
+        self.refresh_apps()
 
     def _refresh_control_password(self) -> None:
         refresh = {"refreshtoken": self.state.refresh_token}
@@ -802,8 +818,19 @@ class HisenseTvClient:
     async def async_change_channel(self, channel_param: str) -> None:
         await asyncio.get_running_loop().run_in_executor(None, self.change_channel, channel_param)
 
-    async def async_launch_app(self, name: str, url: str | None = None) -> None:
-        await asyncio.get_running_loop().run_in_executor(None, self.launch_app, name, url)
+    async def async_launch_app(
+        self,
+        name: str,
+        url: str | None = None,
+        url_type: int = 37,
+        store_type: int = 0,
+    ) -> None:
+        await asyncio.get_running_loop().run_in_executor(
+            None, lambda: self.launch_app(name, url, url_type, store_type)
+        )
+
+    async def async_refresh_apps(self) -> None:
+        await asyncio.get_running_loop().run_in_executor(None, self.refresh_apps)
 
     async def async_wait_for_broker(self) -> bool:
         """Retry MQTT after a physical power-on (button / WoL)."""

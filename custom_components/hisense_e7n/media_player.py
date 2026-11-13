@@ -163,6 +163,8 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
         media_content_type: str | None = None,
         media_content_id: str | None = None,
     ) -> BrowseMedia:
+        if media_content_id in (None, "root", "apps"):
+            await self.coordinator.client.async_refresh_apps()
         tv = self.coordinator.data or self.coordinator.client.state
         if media_content_id in (None, "root"):
             return BrowseMedia(
@@ -174,7 +176,7 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
                 can_expand=True,
                 children=[
                     _folder("Sources", "sources"),
-                    _folder("Apps", "apps"),
+                    _folder("我的应用", "apps"),
                 ],
             )
         if media_content_id == "sources":
@@ -193,8 +195,8 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
             return _folder("Sources", "sources", children)
         children = []
         for app in tv.apps:
-            name = app.get("name") or app.get("appName")
-            url = app.get("url") or app.get("appId") or app.get("id") or name
+            name = app.get("name")
+            url = app.get("url") or app.get("app_id") or name
             if not name:
                 continue
             children.append(
@@ -205,9 +207,10 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
                     media_content_type=MediaType.APP,
                     can_play=True,
                     can_expand=False,
+                    thumbnail=str(app["icon"]) if app.get("icon") else None,
                 )
             )
-        return _folder("Apps", "apps", children)
+        return _folder("我的应用", "apps", children)
 
     async def async_play_media(self, media_type: str, media_id: str, **kwargs: Any) -> None:
         tv = self.coordinator.client.state
@@ -230,11 +233,14 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
         if media_id.startswith("app:"):
             url = media_id.split(":", 1)[1]
             for app in tv.apps:
-                app_url = app.get("url") or app.get("appId") or app.get("id") or ""
-                name = app.get("name") or app.get("appName") or url
-                if str(app_url) == url or str(name) == url:
+                app_url = app.get("url") or app.get("app_id") or ""
+                name = app.get("name") or url
+                if str(app_url) == url or str(name) == url or str(app.get("app_id") or "") == url:
                     await self.coordinator.client.async_launch_app(
-                        str(name), str(app_url) if app_url else None
+                        str(name),
+                        str(app_url) if app_url else None,
+                        int(app.get("url_type") or 37),
+                        int(app.get("store_type") or 0),
                     )
                     return
             await self.coordinator.client.async_launch_app(url, url)
@@ -248,10 +254,15 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
                 await self.coordinator.client.async_change_source(item["id"], source)
                 return
         for app in tv.apps:
-            name = app.get("name") or app.get("appName")
+            name = app.get("name")
             if name == source:
-                url = app.get("url") or app.get("appId") or app.get("id")
-                await self.coordinator.client.async_launch_app(str(name), str(url) if url else None)
+                url = app.get("url") or app.get("app_id")
+                await self.coordinator.client.async_launch_app(
+                    str(name),
+                    str(url) if url else None,
+                    int(app.get("url_type") or 37),
+                    int(app.get("store_type") or 0),
+                )
                 return
         await self.coordinator.client.async_launch_app(source)
 
@@ -266,6 +277,7 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
             "auth_mode": tv.auth_mode,
             "source_id": tv.source_id,
             "power_on_mode": self.coordinator.power_on_mode,
+            "apps": [str(app["name"]) for app in tv.apps if app.get("name")],
         }
 
 
