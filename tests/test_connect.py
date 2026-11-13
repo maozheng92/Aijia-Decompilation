@@ -56,7 +56,8 @@ def test_connect_falls_back_to_plain_after_tls_fail(proto_client, monkeypatch) -
     monkeypatch.setattr(client, "_try_connect", fake_try)
     monkeypatch.setattr(client, "_stop_client", lambda: None)
     creds = client.connect_blocking()
-    assert creds.mode == "static"
+    assert creds.mode == "remote_static"
+    assert creds.client_id == "HomeAssistant"
     assert True in calls and False in calls
     assert client.transport == "plain"
     assert client.use_ssl is False

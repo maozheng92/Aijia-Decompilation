@@ -73,6 +73,7 @@ def test_pair_topic_and_subscriptions_are_concrete(proto_client, proto_credentia
     subs = proto_topics.subscription_topics(creds)
     assert not any(item.endswith("#") or "/+" in item for item in subs)
     assert "/remoteapp/mobile/broadcast/ui_service/state" in subs
+    assert "/remoteapp/mobile/broadcast/platform_service/actions/tvsleep" in subs
 
 
 def test_volume_and_source_parsing(proto_client) -> None:
@@ -91,7 +92,32 @@ def test_volume_and_source_parsing(proto_client) -> None:
     assert client.state.statetype == "remote_launcher"
 
 
-def test_send_key_publishes_raw_and_json_on_mac_topics(proto_client, proto_credentials) -> None:
+def test_fake_sleep_and_tvsleep_turn_the_player_off(proto_client) -> None:
+    client = proto_client.HisenseTvClient("127.0.0.1", uuid="aa:bb:cc:dd:ee:ff")
+    client._apply_state({"statetype": "fake_sleep_0"})
+    assert client.state.power_on is False
+    client._handle_message(
+        "/remoteapp/mobile/broadcast/platform_service/actions/tvsleep",
+        b"",
+    )
+    assert client.state.power_on is False
+    assert client.state.statetype == "tvsleep"
+    client._apply_state({"statetype": "sourceswitch", "sourcename": "HDMI1"})
+    assert client.state.power_on is True
+    assert client.state.source_name == "HDMI1"
+
+
+def test_volume_type_2_is_mute(proto_client) -> None:
+    client = proto_client.HisenseTvClient("127.0.0.1", uuid="aa:bb:cc:dd:ee:ff")
+    client.state.volume = 30
+    client._apply_volume({"volume_type": 2, "volume_value": 1})
+    assert client.state.muted is True
+    assert client.state.volume == 30
+    client._apply_volume({"volume_type": 0, "volume_value": 12})
+    assert client.state.volume == 12
+
+
+def test_send_key_publishes_raw_key_only(proto_client, proto_credentials) -> None:
     client = proto_client.HisenseTvClient(
         "127.0.0.1",
         uuid="12:34:56:78:9a:bc",
@@ -121,9 +147,8 @@ def test_send_key_publishes_raw_and_json_on_mac_topics(proto_client, proto_crede
     assert topics
     assert all(client._creds.client_id in topic for topic in topics)
     assert not any("aa:bb:cc:dd:ee:ff$vidaa_common" in topic for topic in topics)
-    assert "KEY_HOME" in payloads
-    assert '{"key":"KEY_HOME"}' in payloads
-    assert any(topic.endswith("/actions/vidaa_app_connect") for topic in topics)
+    assert payloads == ["KEY_HOME"]
+    assert not any(topic.endswith("/actions/vidaa_app_connect") for topic in topics)
     published.clear()
     client.send_key("screenshot")
     shot_topics = [topic for topic, _ in published]

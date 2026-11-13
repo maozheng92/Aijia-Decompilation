@@ -89,6 +89,7 @@ def changevolume(creds: MqttCredentials) -> str:
 _MOBILE_DATA = (
     ("ui_service", "authentication"),
     ("ui_service", "authenticationcodetoast"),
+    ("ui_service", "authenticationcode"),
     ("ui_service", "authenticationcodeclose"),
     ("ui_service", "tokenissuance"),
     ("ui_service", "state"),
@@ -101,6 +102,7 @@ _MOBILE_DATA = (
 
 _BROADCASTS = (
     "/remoteapp/mobile/broadcast/ui_service/state",
+    "/remoteapp/mobile/broadcast/platform_service/actions/tvsleep",
     "/remoteapp/mobile/broadcast/platform_service/data/volumechange",
     "/remoteapp/mobile/broadcast/platform_service/actions/volumechange",
     "/remoteapp/mobile/broadcast/platform_service/volume",

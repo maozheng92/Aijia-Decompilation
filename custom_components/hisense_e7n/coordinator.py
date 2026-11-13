@@ -91,10 +91,11 @@ class HisenseTvCoordinator(DataUpdateCoordinator[TvState]):
             persistent_notification.async_create(
                 self.hass,
                 (
-                    "电视屏幕上出现了 4 位数字。在开发者工具 → 服务里调用 "
+                    "电视屏幕上出现了 4 位数字。这是 VIDAA 在授权遥控器 "
+                    "HomeAssistant（和 sehaas 集成同一次），不是爱家手机配对。"
+                    "在开发者工具 → 服务里调用 "
                     f"`{DOMAIN}.submit_code`，目标选这台电视的 Remote，"
-                    "把屏幕上的数字填进 code。爱家手机本身不需要这个码；"
-                    "这是电视授权一个新的局域网遥控。"
+                    "把屏幕上的数字填进 code。填对之前，按键不会有反应。"
                 ),
                 title="海信电视需要授权",
                 notification_id=notification_id,

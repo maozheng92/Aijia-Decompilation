@@ -227,7 +227,7 @@ startDiscoverDlnaTv
 
 E7N Pro 是 VIDAA 机。爱家添加家电会提示打开蓝牙（`flutter_blue_plus`），那不是电视遥控，电视菜单里也通常没有蓝牙 MAC。
 
-按键走机内 MQTT `:36669`。`sendkey` 的 topic 必须是本次连接的 client id，不能换成电视 Wi‑Fi MAC。爱家手机配对不需要 PIN；电视第一次授权这个客户端时，可能在屏幕上显示 4 位数字，用 `hisense_e7n.submit_code` 送回去。实现见 `custom_components/hisense_e7n` 与 [e7n-pro-homeassistant.md](e7n-pro-homeassistant.md)。
+按键走机内 MQTT `:36669`，操作方式和 sehaas/ha_hisense_tv 相同：客户端名 `HomeAssistant`，正文是原文 `KEY_*`，QoS 0。不能把电视 Wi‑Fi MAC 填进 topic，也不能发 QoS 1（电视会丢掉，只剩开关状态）。爱家手机配对不需要 PIN；电视第一次授权 `HomeAssistant` 时，可能在屏幕上显示 4 位数字，用 `hisense_e7n.submit_code` 送回去。实现见 `custom_components/hisense_e7n` 与 [e7n-pro-homeassistant.md](e7n-pro-homeassistant.md)。
 
 **开机例外：** 爱家无法唤醒已完全关机的电视（机内 MQTT 不在线，`KEY_POWER` 发不出去）。每台电视在集成里单独选择开机方式：HA 的 button / 开关 / 脚本，或一只红外 `remote` 的 `remote.send_command`，或 Wi-Fi MAC 网络唤醒。
 

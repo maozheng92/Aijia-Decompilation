@@ -228,6 +228,10 @@ class HisenseTvClient:
             return
         if not isinstance(payload, dict):
             return
+        # sehaas volumechange: type 0 is the level, type 2 is mute.
+        if payload.get("volume_type") in (2, "2"):
+            self.state.muted = str(payload.get("volume_value")) in {"1", "true", "True"}
+            return
         for key in ("volume_value", "volume", "vol"):
             if key in payload and payload[key] is not None:
                 try:
@@ -246,13 +250,17 @@ class HisenseTvClient:
                 self.state.power_on = True
             return
         self.state.statetype = data.get("statetype") or data.get("state")
-        name = data.get("sourcename") or data.get("source_name")
+        name = data.get("sourcename") or data.get("source_name") or data.get("displayname")
         sid = data.get("sourceid") or data.get("source_id")
         if name:
             self.state.source_name = str(name)
         if sid is not None:
             self.state.source_id = str(sid)
-        self.state.power_on = True
+        kind = str(self.state.statetype or "").lower()
+        # sehaas treats fake_sleep_0 as off while the broker is still up.
+        self.state.power_on = kind not in {"fake_sleep_0", "fake_sleep", "tvsleep", "sleep", "off"}
+        if kind == "livetv":
+            self.state.source_name = data.get("channel_name") or name or "TV"
         self._apply_volume(data)
         self._maybe_learn_tv_mac(data)
 
@@ -287,6 +295,9 @@ class HisenseTvClient:
             sources.append({"id": str(sid), "name": str(name)})
         if sources:
             self.state.sources = sources
+            # A sourcelist reply is how sehaas learns the client is authorized.
+            self.state.already_paired = True
+            self.state.needs_pin = False
 
     def _apply_apps(self, data: Any) -> None:
         items = data
@@ -304,6 +315,13 @@ class HisenseTvClient:
         if topic.endswith("/data/authentication") or topic.endswith("/data/authenticationcodetoast"):
             self.state.needs_pin = not self.state.already_paired
             self._set_loop_event(self._pin_event)
+        elif topic.endswith("/actions/tvsleep") or topic.endswith("/data/tvsleep"):
+            self.state.power_on = False
+            self.state.statetype = "tvsleep"
+        elif topic.endswith("/data/authenticationcode"):
+            if isinstance(data, dict) and str(data.get("result")) == "1":
+                self.state.already_paired = True
+                self.state.needs_pin = False
         elif topic.endswith("/actions/vidaa_app_connect") or topic.endswith("/data/vidaa_app_connect"):
             result = data.get("connect_result") if isinstance(data, dict) else None
             if result in (1, "1"):
@@ -346,13 +364,12 @@ class HisenseTvClient:
         self._set_loop_event(self._connected_event)
         self._notify()
         if self._creds:
-            try:
-                self.start_pairing()
-            except Exception:  # noqa: BLE001 — announce must not break CONNECT
-                _LOGGER.debug("Client announce after CONNECT failed", exc_info=True)
+            # sehaas authorizes the client by asking for state. The TV either
+            # returns data or publishes /data/authentication (4 digits).
             self._publish_action("ui_service", "gettvstate", "")
-            self._publish_action("platform_service", "getvolume", "")
             self._publish_action("ui_service", "sourcelist", "")
+            self._publish_action("ui_service", "sourcelist", "0")
+            self._publish_action("platform_service", "getvolume", "")
             self._publish_action("ui_service", "applist", "")
 
     def _on_disconnect(self, client: mqtt.Client, userdata: Any, *args: Any, **kwargs: Any) -> None:
@@ -386,7 +403,9 @@ class HisenseTvClient:
             body = json.dumps(payload, separators=(",", ":"))
         else:
             body = str(payload)
-        info = self._client.publish(topic, body, qos=1, retain=False)
+        # The TV broker delivers subscriptions and drops QoS 1 publishes.
+        # sehaas/ha_hisense_tv publishes at QoS 0.
+        info = self._client.publish(topic, body, qos=0, retain=False)
         _LOGGER.debug("MQTT %s -> %s", topic, body)
         if info.rc != mqtt.MQTT_ERR_SUCCESS:
             raise RuntimeError(f"Publish failed rc={info.rc} topic={topic}")
@@ -515,7 +534,7 @@ class HisenseTvClient:
                     return creds
                 last_error = f"mqtt_rc_{rc}"
                 self.state.last_error = last_error
-                if rc in {RC_TCP_FAILED, RC_TLS_FAILED, -1}:
+                if rc in {RC_TCP_FAILED, RC_TLS_FAILED}:
                     # Same socket/TLS setup will fail for every password.
                     break
         self.disconnect_blocking()
@@ -558,8 +577,8 @@ class HisenseTvClient:
     ) -> None:
         creds = self._require_creds()
         if as_key:
-            name = normalize_key(str(payload))
-            bodies: list[Any] = [name, {"key": name}]
+            # sehaas sends the raw KEY_* string and nothing else.
+            bodies = [normalize_key(str(payload))]
         else:
             bodies = [payload]
         last_error: Exception | None = None
@@ -576,11 +595,6 @@ class HisenseTvClient:
 
     def send_key(self, key: str) -> None:
         kind = key.strip().lower()
-        if not self.state.already_paired:
-            try:
-                self.start_pairing()
-            except Exception:  # noqa: BLE001 — still try the key
-                _LOGGER.debug("Client announce before sendkey failed", exc_info=True)
         if kind in {"screenshot", "capture", "capturescreen"}:
             self.capture_screenshot()
             return
@@ -590,6 +604,11 @@ class HisenseTvClient:
         if kind in {"source", "signal"}:
             self.open_source()
             return
+        _LOGGER.info(
+            "sendkey %s as %s",
+            normalize_key(key),
+            self._creds.client_id if self._creds else "",
+        )
         self._publish_action("remote_service", "sendkey", key, as_key=True)
 
     def submit_code(self, code: str) -> None:
@@ -617,7 +636,8 @@ class HisenseTvClient:
 
     def set_volume(self, volume: int) -> None:
         volume = max(0, min(100, int(volume)))
-        self._publish_action("platform_service", "changevolume", str(volume))
+        # sehaas publishes the bare level, not a JSON object.
+        self._publish_action("platform_service", "changevolume", volume)
         self.state.volume = volume
 
     def change_source(self, source_id: str, source_name: str | None = None) -> None:
@@ -627,13 +647,16 @@ class HisenseTvClient:
         self._publish_action("ui_service", "changesource", payload)
 
     def launch_app(self, name: str, url: str | None = None) -> None:
-        payload = {
-            "name": name,
-            "urlType": 37,
-            "storeType": 0,
-            "url": url or name.lower().replace(" ", ""),
-        }
+        app_url = url or name
+        payload = {"appId": app_url, "name": name, "url": app_url}
         self._publish_action("ui_service", "launchapp", payload)
+
+    def change_channel(self, channel_param: str) -> None:
+        self._publish_action(
+            "ui_service",
+            "changechannel",
+            {"channel_param": str(channel_param)},
+        )
 
     def refresh_status(self) -> None:
         self._publish_action("ui_service", "gettvstate", "")
@@ -704,6 +727,9 @@ class HisenseTvClient:
         await asyncio.get_running_loop().run_in_executor(
             None, self.change_source, source_id, source_name
         )
+
+    async def async_change_channel(self, channel_param: str) -> None:
+        await asyncio.get_running_loop().run_in_executor(None, self.change_channel, channel_param)
 
     async def async_launch_app(self, name: str, url: str | None = None) -> None:
         await asyncio.get_running_loop().run_in_executor(None, self.launch_app, name, url)

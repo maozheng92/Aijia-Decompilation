@@ -84,7 +84,7 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
     @property
     def state(self) -> MediaPlayerState:
         tv = self.coordinator.data or self.coordinator.client.state
-        if not tv.available:
+        if not tv.available or not tv.power_on:
             return MediaPlayerState.OFF
         kind = (tv.statetype or "").lower()
         if "pause" in kind:
@@ -213,6 +213,11 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
         tv = self.coordinator.client.state
         if media_type == MediaType.APP and not str(media_id).startswith("app:"):
             await self.coordinator.client.async_launch_app(media_id, kwargs.get("url"))
+            return
+        if media_type in {MediaType.CHANNEL, "channel"} and not str(media_id).startswith(
+            ("source:", "app:")
+        ):
+            await self.coordinator.client.async_change_channel(media_id)
             return
         if media_id.startswith("source:"):
             source_id = media_id.split(":", 1)[1]

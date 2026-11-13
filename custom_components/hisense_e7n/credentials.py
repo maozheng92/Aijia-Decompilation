@@ -16,7 +16,7 @@ import secrets
 import time
 from dataclasses import dataclass
 
-from .const import STATIC_MQTT_PASSWORD, STATIC_MQTT_USERNAME
+from .const import REMOTE_CLIENT_ID, STATIC_MQTT_PASSWORD, STATIC_MQTT_USERNAME
 
 # From libmqttcrypt.so getSalt()/getInfo().
 PATTERN = "38D65DC30F45109A369A86FCE866A85B"
@@ -139,18 +139,51 @@ def generate_static_credentials(uuid: str, *, flavor: str = "vidaa_common") -> M
     )
 
 
+def _as_remote_client(creds: MqttCredentials) -> MqttCredentials:
+    """Keep the password, but use the sehaas remote client id."""
+    return MqttCredentials(
+        client_id=REMOTE_CLIENT_ID,
+        username=creds.username,
+        password=creds.password,
+        uuid=creds.uuid,
+        timestamp=creds.timestamp,
+        mode=f"remote_{creds.mode}",
+    )
+
+
+def generate_remote_static_credentials(uuid: str) -> MqttCredentials:
+    """sehaas bridge login: client ``HomeAssistant``, user ``hisenseservice``."""
+    return _as_remote_client(generate_static_credentials(uuid))
+
+
 def credentials_for_mode(mode: str, uuid: str) -> list[MqttCredentials]:
-    """Return credential candidates in try-order for ``auto``/``dynamic``/``static``."""
+    """Return credential candidates in try-order for ``auto``/``dynamic``/``static``.
+
+    Commands follow sehaas/ha_hisense_tv: the MQTT client id is
+    ``HomeAssistant``. E7N Pro often rejects that static password, so the
+    same dynamic password is also tried with that client id, then the
+    older MAC-shaped ids if the broker refuses ``HomeAssistant``.
+    """
     mode = (mode or "auto").lower()
     dynamic_modern = generate_dynamic_credentials(uuid, modern=True)
     dynamic_legacy = generate_dynamic_credentials(uuid, modern=False)
+    remote_static = generate_remote_static_credentials(uuid)
+    remote_modern = _as_remote_client(dynamic_modern)
+    remote_legacy = _as_remote_client(dynamic_legacy)
     statics = [
         generate_static_credentials(uuid, flavor="vidaa_common"),
         generate_static_credentials(uuid, flavor="normal"),
         generate_static_credentials(uuid, flavor="bare"),
     ]
     if mode == "static":
-        return statics
+        return [remote_static, *statics]
     if mode == "dynamic":
-        return [dynamic_modern, dynamic_legacy]
-    return [dynamic_modern, dynamic_legacy, *statics]
+        return [remote_modern, remote_legacy, dynamic_modern, dynamic_legacy]
+    return [
+        remote_static,
+        remote_modern,
+        remote_legacy,
+        dynamic_modern,
+        dynamic_legacy,
+        *statics,
+    ]

@@ -42,6 +42,9 @@ RC_TLS_FAILED = 99
 
 STATIC_MQTT_USERNAME = "hisenseservice"
 STATIC_MQTT_PASSWORD = "multimqttservice"
+# Same client id sehaas/ha_hisense_tv publishes with. The TV authorizes
+# remote keys for this name, not for an 爱家 dynamic client id.
+REMOTE_CLIENT_ID = "HomeAssistant"
 
 DATA_CLIENT = "client"
 DATA_COORDINATOR = "coordinator"
