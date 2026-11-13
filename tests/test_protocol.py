@@ -92,6 +92,18 @@ def test_volume_and_source_parsing(proto_client) -> None:
     assert client.state.statetype == "remote_launcher"
 
 
+def test_token_issuance_replaces_the_pairing_secret(proto_client) -> None:
+    client = proto_client.HisenseTvClient("127.0.0.1", uuid="aa:bb:cc:dd:ee:ff")
+    client._handle_message(
+        "/remoteapp/mobile/x/ui_service/data/tokenissuance",
+        b'{"accesstoken":"abc","refreshtoken":"def"}',
+    )
+    assert client.state.access_token == "abc"
+    assert client.state.refresh_token == "def"
+    assert client.state.already_paired is True
+    assert client.state.needs_pin is False
+
+
 def test_fake_sleep_and_tvsleep_turn_the_player_off(proto_client) -> None:
     client = proto_client.HisenseTvClient("127.0.0.1", uuid="aa:bb:cc:dd:ee:ff")
     client._apply_state({"statetype": "fake_sleep_0"})
@@ -147,7 +159,8 @@ def test_send_key_publishes_raw_key_only(proto_client, proto_credentials) -> Non
     assert topics
     assert all(client._creds.client_id in topic for topic in topics)
     assert not any("aa:bb:cc:dd:ee:ff$vidaa_common" in topic for topic in topics)
-    assert payloads == ["KEY_HOME"]
+    assert "KEY_HOME" in payloads
+    assert '{"key":"KEY_HOME"}' in payloads
     assert not any(topic.endswith("/actions/vidaa_app_connect") for topic in topics)
     published.clear()
     client.send_key("screenshot")

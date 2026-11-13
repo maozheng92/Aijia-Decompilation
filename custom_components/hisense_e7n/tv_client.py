@@ -31,7 +31,9 @@ from .const import (
 from .credentials import (
     MqttCredentials,
     credentials_for_mode,
+    generate_dynamic_credentials,
     normalize_uuid,
+    with_access_token,
 )
 from .keys import KEY_POWER, KEY_SOURCE, normalize_key
 
@@ -165,6 +167,9 @@ class HisenseTvClient:
         keyfile: str | None = None,
         cert_pairs: list[tuple[str | None, str | None]] | None = None,
         use_ssl: bool | None = None,
+        access_token: str | None = None,
+        refresh_token: str | None = None,
+        control_username: str | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         self.host = host
@@ -178,7 +183,11 @@ class HisenseTvClient:
         self.use_ssl = use_ssl
         self.transport: str | None = None
         self._loop = loop
-        self.state = TvState()
+        self.state = TvState(
+            access_token=(access_token or "").strip() or None,
+            refresh_token=(refresh_token or "").strip() or None,
+        )
+        self._control_username = (control_username or "").strip()
         self._listeners: list[Callable[[TvState], None]] = []
         self._client: mqtt.Client | None = None
         self._creds: MqttCredentials | None = None
@@ -330,8 +339,12 @@ class HisenseTvClient:
             self._set_loop_event(self._pin_event)
         elif topic.endswith("/data/tokenissuance"):
             if isinstance(data, dict):
-                self.state.access_token = data.get("accesstoken")
-                self.state.refresh_token = data.get("refreshtoken")
+                access = str(data.get("accesstoken") or "").strip()
+                refresh = str(data.get("refreshtoken") or "").strip()
+                if access:
+                    self.state.access_token = access
+                if refresh:
+                    self.state.refresh_token = refresh
             self.state.already_paired = True
             self.state.needs_pin = False
             self._set_loop_event(self._token_event)
@@ -364,8 +377,20 @@ class HisenseTvClient:
         self._set_loop_event(self._connected_event)
         self._notify()
         if self._creds:
-            # sehaas authorizes the client by asking for state. The TV either
-            # returns data or publishes /data/authentication (4 digits).
+            using_token = self._creds.mode == "access_token"
+            if not using_token and self.state.refresh_token:
+                # The stored control password expired. Ask for a new one
+                # before showing another on-screen code.
+                refresh = {"refreshtoken": self.state.refresh_token}
+                self._publish_action("platform_service", "gettoken", refresh)
+                self._publish_action("ui_service", "gettoken", refresh)
+            elif not using_token:
+                # Pairing password only. vidaa_app_connect asks the TV to
+                # show the 4-digit code and then issue an access token.
+                try:
+                    self.start_pairing()
+                except Exception:  # noqa: BLE001 — state query still runs
+                    _LOGGER.debug("Pairing announce failed", exc_info=True)
             self._publish_action("ui_service", "gettvstate", "")
             self._publish_action("ui_service", "sourcelist", "")
             self._publish_action("ui_service", "sourcelist", "0")
@@ -482,7 +507,29 @@ class HisenseTvClient:
 
     def _credential_sets(self, use_tls: bool) -> list[MqttCredentials]:
         mode = "static" if not use_tls else self.auth_mode
-        candidates = credentials_for_mode(mode, self.uuid)
+        candidates: list[MqttCredentials] = []
+        token = (self.state.access_token or "").strip()
+        if token:
+            # Control session: same client id, access token as the password.
+            # Try the username from the pairing session first, then a fresh one.
+            base = generate_dynamic_credentials(self.uuid, modern=True)
+            if self._control_username:
+                candidates.append(
+                    MqttCredentials(
+                        client_id=base.client_id,
+                        username=self._control_username,
+                        password=token,
+                        uuid=base.uuid,
+                        timestamp=base.timestamp,
+                        mode="access_token",
+                    )
+                )
+            for modern in (True, False):
+                fresh = base if modern else generate_dynamic_credentials(self.uuid, modern=False)
+                if fresh.username == self._control_username:
+                    continue
+                candidates.append(with_access_token(fresh, token))
+        candidates.extend(credentials_for_mode(mode, self.uuid))
         mac = (self.tv_mac or "").strip()
         if mac:
             try:
@@ -577,8 +624,10 @@ class HisenseTvClient:
     ) -> None:
         creds = self._require_creds()
         if as_key:
-            # sehaas sends the raw KEY_* string and nothing else.
-            bodies = [normalize_key(str(payload))]
+            # VIDAA accepts the raw name. 爱家 sends {"key":"KEY_*"} on the
+            # same topic. Publish both once the control password is in use.
+            name = normalize_key(str(payload))
+            bodies = [name, {"key": name}]
         else:
             bodies = [payload]
         last_error: Exception | None = None

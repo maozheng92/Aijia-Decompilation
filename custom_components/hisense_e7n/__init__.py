@@ -12,15 +12,18 @@ from homeassistant.exceptions import ConfigEntryNotReady
 
 from .certs_util import resolve_cert_candidates
 from .const import (
+    CONF_ACCESS_TOKEN,
     CONF_AUTH_MODE,
     CONF_CLIENT_CERT,
     CONF_CLIENT_KEY,
     CONF_CLIENT_UUID,
+    CONF_CONTROL_USERNAME,
     CONF_POWER_ON_BUTTON,
     CONF_POWER_ON_COMMAND,
     CONF_POWER_ON_DEVICE,
     CONF_POWER_ON_MODE,
     CONF_POWER_ON_REMOTE,
+    CONF_REFRESH_TOKEN,
     CONF_USE_SSL,
     DATA_CLIENT,
     DATA_COORDINATOR,
@@ -79,6 +82,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         keyfile=keyfile,
         cert_pairs=cert_pairs,
         use_ssl=use_ssl,
+        access_token=data.get(CONF_ACCESS_TOKEN),
+        refresh_token=data.get(CONF_REFRESH_TOKEN),
+        control_username=data.get(CONF_CONTROL_USERNAME),
         loop=hass.loop,
     )
 
@@ -101,6 +107,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass,
         client,
         data.get(CONF_NAME, host),
+        entry,
         power_on_button=power_on_button,
     )
     coordinator.configure_power_on(

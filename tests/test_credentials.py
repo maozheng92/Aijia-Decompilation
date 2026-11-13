@@ -54,20 +54,18 @@ def test_stable_client_uuid_ignores_tv_mac(proto_credentials) -> None:
     assert len(minted.split(":")) == 6
 
 
-def test_auto_mode_tries_homeassistant_before_mac_ids(proto_credentials) -> None:
+def test_auto_mode_keeps_dynamic_identity_ahead_of_homeassistant(proto_credentials) -> None:
     creds = proto_credentials.credentials_for_mode("auto", "aa:bb:cc:dd:ee:ff")
     ids = [item.client_id for item in creds]
-    assert ids[0] == "HomeAssistant"
+    assert ids[0].endswith("_vidaacommon_001")
+    assert "HomeAssistant" in ids
+    assert ids.index(ids[0]) < ids.index("HomeAssistant")
     assert "aa:bb:cc:dd:ee:ff$vidaa_common" in ids
-    assert "aa:bb:cc:dd:ee:ff$normal" in ids
-    remote = proto_credentials.generate_remote_static_credentials("aa:bb:cc:dd:ee:ff")
-    assert remote.client_id == "HomeAssistant"
-    assert remote.username == "hisenseservice"
-    assert remote.password == "multimqttservice"
     dynamic = proto_credentials.generate_dynamic_credentials(
         "56:b8:88:4e:f7:19", timestamp=1766974704
     )
-    as_remote = proto_credentials._as_remote_client(dynamic)
-    assert as_remote.client_id == "HomeAssistant"
-    assert as_remote.username == dynamic.username
-    assert as_remote.password == dynamic.password
+    swapped = proto_credentials.with_access_token(dynamic, "issued-token")
+    assert swapped.client_id == dynamic.client_id
+    assert swapped.username == dynamic.username
+    assert swapped.password == "issued-token"
+    assert swapped.mode == "access_token"

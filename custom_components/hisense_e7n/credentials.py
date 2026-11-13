@@ -156,13 +156,32 @@ def generate_remote_static_credentials(uuid: str) -> MqttCredentials:
     return _as_remote_client(generate_static_credentials(uuid))
 
 
-def credentials_for_mode(mode: str, uuid: str) -> list[MqttCredentials]:
-    """Return credential candidates in try-order for ``auto``/``dynamic``/``static``.
+def with_access_token(creds: MqttCredentials, access_token: str) -> MqttCredentials:
+    """Swap in the control password the TV issues after the on-screen code.
 
-    Commands follow sehaas/ha_hisense_tv: the MQTT client id is
-    ``HomeAssistant``. E7N Pro often rejects that static password, so the
-    same dynamic password is also tried with that client id, then the
-    older MAC-shaped ids if the broker refuses ``HomeAssistant``.
+    The MD5 password only opens the broker. Commands are accepted after
+    reconnecting with the same client id and username, and this token as
+    the password.
+    """
+    token = access_token.strip()
+    if not token:
+        raise ValueError("access token is empty")
+    return MqttCredentials(
+        client_id=creds.client_id,
+        username=creds.username,
+        password=token,
+        uuid=creds.uuid,
+        timestamp=creds.timestamp,
+        mode="access_token",
+    )
+
+
+def credentials_for_mode(mode: str, uuid: str) -> list[MqttCredentials]:
+    """Pairing passwords, in try order.
+
+    The dynamic client id must stay paired with its own password. Trying
+    ``HomeAssistant`` first accepts a login the TV will not authorize for
+    keys. That static client is only a last resort for older firmware.
     """
     mode = (mode or "auto").lower()
     dynamic_modern = generate_dynamic_credentials(uuid, modern=True)
@@ -176,14 +195,14 @@ def credentials_for_mode(mode: str, uuid: str) -> list[MqttCredentials]:
         generate_static_credentials(uuid, flavor="bare"),
     ]
     if mode == "static":
-        return [remote_static, *statics]
+        return [*statics, remote_static]
     if mode == "dynamic":
-        return [remote_modern, remote_legacy, dynamic_modern, dynamic_legacy]
+        return [dynamic_modern, dynamic_legacy, remote_modern, remote_legacy]
     return [
-        remote_static,
-        remote_modern,
-        remote_legacy,
         dynamic_modern,
         dynamic_legacy,
         *statics,
+        remote_modern,
+        remote_legacy,
+        remote_static,
     ]

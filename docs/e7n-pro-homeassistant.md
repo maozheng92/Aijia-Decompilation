@@ -6,7 +6,7 @@ E7N Pro 是 **VIDAA** 智能电视（国内与爱家 App 配套）。爱家添�
 
 | 通道 | 何时出现 | 是否适合 HA |
 |---|---|---|
-| **机内 MQTT `:36669`（TLS）** | 电视开机或网络待机 | **按键和状态。** 操作方式和 [sehaas/ha_hisense_tv](https://github.com/sehaas/ha_hisense_tv) 相同：客户端名 `HomeAssistant`，正文是原文 `KEY_*`，QoS 0 |
+| **机内 MQTT `:36669`（TLS）** | 电视开机或网络待机 | **按键和状态。** 动态客户端 id 配对，屏幕上的 4 位数字换成 access token 后再发 `KEY_*`，QoS 0 |
 | 爱家云 `pushRemoter` / `devices/execute` | 手机 App 远程 | 要账号 token，不适合本地集成 |
 | 爱家「打开蓝牙」 | 添加空调等家电 | 不是 E7N 遥控，集成不再要求蓝牙地址 |
 | HiConnect UDP `229.x.x.x` + TCP/AES | 爱家同网发现/家电控制 | 家电通用栈，本集成不走 |
@@ -20,9 +20,9 @@ E7N Pro 是 **VIDAA** 智能电视（国内与爱家 App 配套）。爱家添�
 payload: KEY_POWER          （VIDAA 原文；JSON {"key":"KEY_POWER"} 是爱家云格式）
 ```
 
-`<identity>` 使用 sehaas 的固定客户端名 `HomeAssistant`，并且和这次 MQTT CONNECT 的 client id 相同。按键正文只发 `KEY_HOME` 这种原文，不发 `{"key":"KEY_HOME"}`，QoS 为 0。电视上的 Mosquitto 会丢掉 QoS 1 的发布，所以以前能看到开关、按键却没反应。把电视 Wi‑Fi MAC 填进 topic（`$vidaa_common` / `$normal`）时，连接可以成功，按键也会被丢掉。
+`<identity>` 必须是动态客户端 id（`{uuid}$his$……_vidaacommon_001`），而且要和这次 CONNECT 的 client id 相同。`HomeAssistant` / `hisenseservice` 是旧固件的账号，E7N Pro 即使用它连上，也不会执行按键。
 
-第一次授权 `HomeAssistant` 时，电视可能在屏幕上显示 4 位数字，并往 `/data/authentication` 发一条消息。把数字填进 `hisense_e7n.submit_code`。这是 VIDAA 遥控的一次性授权，不是爱家手机配对。收到信号源列表就表示已经授权，不必再填。
+配对密码（时间戳算出来的 MD5）只负责连上 broker。电视弹出 4 位数字后，把数字交给 `hisense_e7n.submit_code`。电视随后下发 `accesstoken`，集成用这个 token 当密码重新连接，这时按键才会生效。QoS 仍是 0：QoS 1 的发布会被电视丢掉。
 
 E7N Pro（以及同代 E7N / E7NQ Pro）固件在 2024 之后通常还要：
 
@@ -152,7 +152,7 @@ power_on_button: button.living_room_ir_tv_power
 
 ## 按键仍无反应
 
-1. 确认集成已更新到 1.6.0 并重启。按键按 sehaas 的方式发送：客户端 `HomeAssistant`、原文 `KEY_*`、QoS 0。1.5.1 及更早的版本用 QoS 1，电视只回开关状态、不执行操作。若屏幕出现 4 位数字，调用 `hisense_e7n.submit_code`。
+1. 确认集成已更新到 1.7.0 并重启。1.6.0 用了 `HomeAssistant` 静态账号，E7N 不认这套凭证。1.7.0 先用动态配对密码连接；屏幕上出现 4 位数字时调用 `hisense_e7n.submit_code`。电视返回控制凭证后，集成会自动用它重连，然后按键才有反应。
 2. 电视需已开机，和 HA 同一局域网。
 3. 若屏幕或 HA 通知里出现 4 位数字：
 
