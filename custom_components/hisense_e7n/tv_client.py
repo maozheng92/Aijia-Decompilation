@@ -37,6 +37,7 @@ from .credentials import (
 )
 from .keys import KEY_POWER, KEY_SOURCE, normalize_key
 from .local_http import capture_screen, push_voice, send_local_key
+from .screenshot_store import image_for_upload
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -152,8 +153,8 @@ class TvState:
     pin_requested: bool = False
     access_token: str | None = None
     refresh_token: str | None = None
-    screenshot_path: str | None = None
-    screenshot_media_id: str | None = None
+    screenshot_image: bytes | None = None
+    screenshot_content_type: str = "image/jpeg"
     screenshot_note: str = ""
 
 
@@ -659,18 +660,15 @@ class HisenseTvClient:
         self.state.needs_pin = False
 
     def capture_screenshot(self) -> bytes:
-        """Download the current frame. The caller stores it in the Image media source."""
+        """Download the current frame onto state for the Image entity."""
         shot = capture_screen(self.host)
+        image, content_type = image_for_upload(shot.image)
         self.state.screenshot_note = shot.note
+        self.state.screenshot_image = image
+        self.state.screenshot_content_type = content_type
         self._notify()
-        _LOGGER.info("Captured TV screenshot (%s bytes)", len(shot.image))
-        return shot.image
-
-    def remember_screenshot(self, media_id: str) -> None:
-        """Point state at the Image media-source item that holds the last frame."""
-        self.state.screenshot_media_id = media_id
-        self.state.screenshot_path = f"/api/image/serve/{media_id}/original"
-        self._notify()
+        _LOGGER.info("Captured TV screenshot (%s bytes)", len(image))
+        return image
 
     def open_source(self) -> None:
         """爱家 信号源: speak the command, then fall back to KEY_SOURCE."""

@@ -85,6 +85,11 @@
         "name": "Remote"
       }
     },
+    "image": {
+      "screenshot": {
+        "name": "Screenshot"
+      }
+    },
     "button": {
       "power": {"name": "Power"},
       "volume_down": {"name": "Volume down"},
