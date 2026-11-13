@@ -88,9 +88,9 @@ data:
 |---|---|
 | 电源 | `button.…_power` → `KEY_POWER`（电视离线时改走这台电视的开机方式） |
 | 音量 − / 静音 / 音量 + | `KEY_VOLUMEDOWN` / `KEY_MUTE` / `KEY_VOLUMEUP` |
-| 截屏 | `button.…_screenshot` → 爱家 `captureTvScreen` / `getTvScreenInfo` |
-| 信号源 | `button.…_source` → 刷新 `sourcelist` + `KEY_SOURCE` |
-| AI识图 | `button.…_smart_image` → 爱家 `pushSmartImage` |
+| 截屏 | `button.…_screenshot` → 电视上传当前画面，保存到 `config/www/hisense_e7n/<条目>.jpg`，通知里给 `/local/hisense_e7n/<条目>.jpg` |
+| 信号源 | `button.…_source` → 本机语音「信号源」，没有应答再发 `KEY_SOURCE` |
+| AI识图 | `button.…_smart_image` → 本机语音「识图」，没有应答再发 `functionSmartImage` |
 | 设置 | `KEY_CONTROL_CENTER` |
 | 方向键 / OK | `KEY_UP` `KEY_DOWN` `KEY_LEFT` `KEY_RIGHT` `KEY_OK` |
 | 返回 / 首页 / 菜单 | `KEY_RETURNS` / `KEY_HOME` / `KEY_MENU` |
@@ -152,7 +152,7 @@ power_on_button: button.living_room_ir_tv_power
 
 ## 按键仍无反应
 
-1. 更新到 1.10.0 并重启，然后按「音量+」。E7N 不弹出 4 位授权码，「请求授权码」发的是 MQTT 配对，电视直接丢掉。按键改走电视自己的 `http://<电视IP>:7778/<按键>..controller`（不行再试 7779）。开关状态仍从 36669 的广播读取。
+1. 更新到 1.11.0 并重启，然后按「音量+」。方向键走 `http://<电视IP>:7778/<按键>..controller`（不行再试 7779）。信号源、AI识图走本机语音口 `7779/..pushwechatvoice`。截屏会在通知里写出保存路径 `config/www/hisense_e7n/<条目>.jpg`。开关状态仍从 36669 的广播读取。
 2. 电视需已开机，和 HA 同一局域网。
 3. 若屏幕或 HA 通知里出现 4 位数字：
 

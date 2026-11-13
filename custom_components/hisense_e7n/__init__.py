@@ -72,6 +72,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     power_on_button = normalize_power_on_entity(data.get(CONF_POWER_ON_BUTTON))
     power_on_remote = normalize_power_on_entity(data.get(CONF_POWER_ON_REMOTE))
+    shot_dir = Path(hass.config.path("www", "hisense_e7n"))
+    shot_dir.mkdir(parents=True, exist_ok=True)
     client = HisenseTvClient(
         host,
         port=port,
@@ -86,6 +88,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         refresh_token=data.get(CONF_REFRESH_TOKEN),
         control_username=data.get(CONF_CONTROL_USERNAME),
         loop=hass.loop,
+        screenshot_dir=str(shot_dir),
+        screenshot_name=f"{entry.entry_id}.jpg",
     )
 
     try:

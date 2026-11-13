@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from homeassistant.components import persistent_notification
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -55,7 +58,21 @@ class HisenseTvRemoterButton(HisenseTvEntity, ButtonEntity):
                 await client.async_send_key(KEY_POWER)
             return
         if kind == "screenshot":
-            await client.async_capture_screenshot()
+            path = await client.async_capture_screenshot()
+            filename = Path(path).name
+            note = client.state.screenshot_note
+            message = (
+                f"截屏已保存到 config/www/hisense_e7n/{filename}。"
+                f"在浏览器打开 /local/hisense_e7n/{filename} 。"
+            )
+            if note:
+                message = f"{note}\n{message}"
+            persistent_notification.async_create(
+                self.hass,
+                message,
+                title="海信截屏",
+                notification_id=f"{DOMAIN}_screenshot_{self._entry.entry_id}",
+            )
             return
         if kind == "source":
             await client.async_open_source()

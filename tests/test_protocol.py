@@ -193,11 +193,6 @@ def test_send_key_publishes_raw_key_only(proto_client, proto_credentials) -> Non
     assert not any("aa:bb:cc:dd:ee:ff$vidaa_common" in topic for topic in topics)
     assert payloads == ["KEY_HOME"]
     assert not any(topic.endswith("/actions/vidaa_app_connect") for topic in topics)
-    published.clear()
-    client.send_key("screenshot")
-    shot_topics = [topic for topic, _ in published]
-    assert any(topic.endswith("/actions/captureTvScreen") for topic in shot_topics)
-    assert any(topic.endswith("/actions/getTvScreenInfo") for topic in shot_topics)
 
 
 def test_wol_packet_shape(proto_client, monkeypatch) -> None:

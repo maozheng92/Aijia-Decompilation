@@ -12,6 +12,7 @@ import logging
 import socket
 import ssl
 import threading
+from pathlib import Path
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -36,7 +37,7 @@ from .credentials import (
     with_access_token,
 )
 from .keys import KEY_POWER, KEY_SOURCE, normalize_key
-from .local_http import send_local_key
+from .local_http import capture_screen, push_voice, send_local_key
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -152,6 +153,8 @@ class TvState:
     pin_requested: bool = False
     access_token: str | None = None
     refresh_token: str | None = None
+    screenshot_path: str | None = None
+    screenshot_note: str = ""
 
 
 class HisenseTvClient:
@@ -173,6 +176,8 @@ class HisenseTvClient:
         refresh_token: str | None = None,
         control_username: str | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
+        screenshot_dir: str | None = None,
+        screenshot_name: str = "screen.jpg",
     ) -> None:
         self.host = host
         self.port = port
@@ -200,6 +205,8 @@ class HisenseTvClient:
         self._connect_rc: int = -1
         self._lock = threading.Lock()
         self.ble: Any = None
+        self.screenshot_dir = screenshot_dir
+        self.screenshot_name = screenshot_name
 
     @property
     def creds(self) -> MqttCredentials | None:
@@ -655,19 +662,43 @@ class HisenseTvClient:
         self._publish_action("ui_service", "authenticationcode", {"authNum": int(digits)})
         self.state.needs_pin = False
 
-    def capture_screenshot(self) -> None:
-        """爱家 截屏: captureTvScreen / getTvScreenInfo."""
-        for action in ("captureTvScreen", "getTvScreenInfo", "gettvpic", "screenshot"):
-            self._publish_action("ui_service", action, "")
+    def capture_screenshot(self) -> str:
+        """Download the current frame and store it under config/www."""
+        shot = capture_screen(self.host)
+        directory = self.screenshot_dir
+        if not directory:
+            raise RuntimeError("截屏目录未配置")
+        path = Path(directory) / self.screenshot_name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(shot.image)
+        self.state.screenshot_path = str(path)
+        self.state.screenshot_note = shot.note
+        self._notify()
+        _LOGGER.info("Saved TV screenshot to %s", path)
+        return str(path)
 
     def open_source(self) -> None:
-        """爱家 信号源: the local HTTP key, then the MQTT source list."""
-        send_local_key(self.host, KEY_SOURCE)
+        """爱家 信号源: speak the command, then fall back to KEY_SOURCE."""
+        status = push_voice(self.host, "信号源")
+        if status is not None and 200 <= status < 300:
+            return
+        status = send_local_key(self.host, KEY_SOURCE)
+        if status is not None and 200 <= status < 300:
+            return
+        _LOGGER.info("Local source command was not accepted (%s); trying MQTT", status)
         self._publish_action("ui_service", "sourcelist", "")
         self._publish_action("remote_service", "sendkey", KEY_SOURCE, as_key=True)
 
     def push_smart_image(self) -> None:
-        """爱家 AI识图: pushSmartImage / functionSmartImage."""
+        """爱家 AI识图: voice 识图, then the app's function names."""
+        status = push_voice(self.host, "识图")
+        if status is not None and 200 <= status < 300:
+            return
+        for name in ("functionSmartImage", "pushSmartImage"):
+            status = send_local_key(self.host, name)
+            if status is not None and 200 <= status < 300:
+                return
+        _LOGGER.info("Local AI image command was not accepted (%s); trying MQTT", status)
         for action in ("smartimage", "pushSmartImage", "functionSmartImage"):
             self._publish_action("ui_service", action, "")
 
@@ -756,8 +787,8 @@ class HisenseTvClient:
                 _LOGGER.debug("BLE disconnect failed", exc_info=True)
         await loop.run_in_executor(None, self.disconnect_blocking)
 
-    async def async_capture_screenshot(self) -> None:
-        await asyncio.get_running_loop().run_in_executor(None, self.capture_screenshot)
+    async def async_capture_screenshot(self) -> str:
+        return await asyncio.get_running_loop().run_in_executor(None, self.capture_screenshot)
 
     async def async_open_source(self) -> None:
         await asyncio.get_running_loop().run_in_executor(None, self.open_source)
