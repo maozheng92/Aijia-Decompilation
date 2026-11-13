@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components import persistent_notification
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
@@ -10,6 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DATA_COORDINATOR, DOMAIN
 from .coordinator import HisenseTvCoordinator
+from .custom_sources import custom_source_slug
 from .entity import HisenseTvEntity
 from .keys import AIJIA_REMOTER_BUTTONS, KEY_POWER, RemoterButton
 from .screenshot_store import async_save_screenshot
@@ -21,9 +24,14 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: HisenseTvCoordinator = hass.data[DOMAIN][entry.entry_id][DATA_COORDINATOR]
-    async_add_entities(
-        [HisenseTvRemoterButton(coordinator, entry, spec) for spec in AIJIA_REMOTER_BUTTONS]
+    entities: list[ButtonEntity] = [
+        HisenseTvRemoterButton(coordinator, entry, spec) for spec in AIJIA_REMOTER_BUTTONS
+    ]
+    entities.extend(
+        HisenseTvCustomSourceButton(coordinator, entry, source)
+        for source in coordinator.custom_sources
     )
+    async_add_entities(entities)
 
 
 class HisenseTvRemoterButton(HisenseTvEntity, ButtonEntity):
@@ -88,3 +96,32 @@ class HisenseTvRemoterButton(HisenseTvEntity, ButtonEntity):
             await client.async_push_smart_image()
             return
         await client.async_send_key(self._spec.payload or self._spec.slug)
+
+
+class HisenseTvCustomSourceButton(HisenseTvEntity, ButtonEntity):
+    """One user-defined input switched by a remoter key sequence."""
+
+    _attr_icon = "mdi:video-input-hdmi"
+
+    def __init__(
+        self,
+        coordinator: HisenseTvCoordinator,
+        entry: ConfigEntry,
+        source: dict[str, Any],
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._source_name = str(source["name"])
+        self._keys = list(source["keys"])
+        slug = custom_source_slug(self._source_name)
+        self._attr_unique_id = f"{entry.entry_id}_custom_source_{slug}"
+        self._attr_name = self._source_name
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.client.state.available
+
+    async def async_press(self) -> None:
+        await self.coordinator.client.async_run_key_sequence(
+            self._keys,
+            delay=self.coordinator.source_key_delay,
+        )

@@ -57,7 +57,9 @@
           "power_on_command": "IR command",
           "power_on_device": "IR device name",
           "mac": "TV Wi-Fi MAC",
-          "name": "Name"
+          "name": "Name",
+          "custom_sources_text": "Custom inputs",
+          "source_key_delay": "Pause between keys (seconds)"
         },
         "data_description": {
           "power_on_mode": "Button, infrared remote, or Wake-on-LAN. This setting is stored per TV.",
@@ -65,13 +67,16 @@
           "power_on_remote": "remote entity used when the mode is Infrared remote.",
           "power_on_command": "IR command name, for example power.",
           "power_on_device": "Optional Harmony device name.",
-          "mac": "Wi-Fi MAC for Wake-on-LAN. Required when the mode is Wake-on-LAN."
+          "mac": "Wi-Fi MAC for Wake-on-LAN. Required when the mode is Wake-on-LAN.",
+          "custom_sources_text": "One input per line: Name: KEY_SOURCE, KEY_RIGHT, KEY_OK. Aliases such as source, right, ok also work. Each line becomes a media_player source and a button.",
+          "source_key_delay": "Wait this long between remoter keys in a custom input sequence. Default 0.5."
         }
       }
     },
     "error": {
       "cannot_connect_ble": "Invalid or unreachable TV Bluetooth address. Enable Bluetooth on the Home Assistant host and retry.",
-      "power_on_required": "This power-on method needs the matching entity, IR command, or Wi-Fi MAC."
+      "power_on_required": "This power-on method needs the matching entity, IR command, or Wi-Fi MAC.",
+      "invalid_custom_sources": "Each line must be Name: key, key, … with at least one remoter key."
     }
   },
   "entity": {

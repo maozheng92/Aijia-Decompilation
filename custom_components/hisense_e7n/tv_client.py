@@ -12,6 +12,7 @@ import logging
 import socket
 import ssl
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -23,6 +24,7 @@ from .apps import normalize_apps
 from .certs_util import build_ssl_context
 from .const import (
     DEFAULT_PORT,
+    DEFAULT_SOURCE_KEY_DELAY,
     MQTT_CONNACK_WAIT,
     MQTT_CONNECT_TIMEOUT,
     MQTT_KEEPALIVE,
@@ -688,6 +690,23 @@ class HisenseTvClient:
         self._publish_action("ui_service", "sourcelist", "")
         self._publish_action("remote_service", "sendkey", KEY_SOURCE, as_key=True)
 
+    def run_key_sequence(
+        self,
+        keys: list[str],
+        *,
+        delay: float = DEFAULT_SOURCE_KEY_DELAY,
+        pause: Callable[[float], None] = time.sleep,
+    ) -> None:
+        """Send remoter keys in order, with a short pause between them.
+
+        Used for custom inputs such as ``KEY_SOURCE → KEY_RIGHT → KEY_OK``.
+        """
+        wait = max(0.0, float(delay))
+        for index, key in enumerate(keys):
+            if index and wait:
+                pause(wait)
+            self.send_key(key)
+
     def push_smart_image(self) -> None:
         """爱家 AI识图: voice 识图, then the app's function names."""
         status = push_voice(self.host, "识图")
@@ -841,6 +860,16 @@ class HisenseTvClient:
 
     async def async_open_source(self) -> None:
         await asyncio.get_running_loop().run_in_executor(None, self.open_source)
+
+    async def async_run_key_sequence(
+        self,
+        keys: list[str],
+        *,
+        delay: float = DEFAULT_SOURCE_KEY_DELAY,
+    ) -> None:
+        await asyncio.get_running_loop().run_in_executor(
+            None, lambda: self.run_key_sequence(keys, delay=delay)
+        )
 
     async def async_push_smart_image(self) -> None:
         await asyncio.get_running_loop().run_in_executor(None, self.push_smart_image)

@@ -32,20 +32,28 @@ from .const import (
     CONF_CLIENT_CERT,
     CONF_CLIENT_KEY,
     CONF_CLIENT_UUID,
+    CONF_CUSTOM_SOURCES,
+    CONF_CUSTOM_SOURCES_TEXT,
     CONF_POWER_ON_BUTTON,
     CONF_POWER_ON_COMMAND,
     CONF_POWER_ON_DEVICE,
     CONF_POWER_ON_MODE,
     CONF_POWER_ON_REMOTE,
+    CONF_SOURCE_KEY_DELAY,
     CONF_USE_SSL,
     DEFAULT_AUTH_MODE,
     DEFAULT_NAME,
     DEFAULT_PORT,
     DEFAULT_POWER_ON_COMMAND,
+    DEFAULT_SOURCE_KEY_DELAY,
     DOMAIN,
     POWER_ON_MODE_BUTTON,
 )
 from .credentials import random_client_uuid
+from .custom_sources import (
+    normalize_custom_sources,
+    serialize_custom_sources,
+)
 from .power import (
     POWER_ON_DOMAINS,
     POWER_ON_MODES,
@@ -228,6 +236,19 @@ class HisenseE7NOptionsFlow(config_entries.OptionsFlow):
         return getattr(self, "_config_entry", None) or self.config_entry
 
     def _options_schema(self, data: dict[str, Any]) -> vol.Schema:
+        delay = data.get(CONF_SOURCE_KEY_DELAY, DEFAULT_SOURCE_KEY_DELAY)
+        try:
+            delay_default = float(delay)
+        except (TypeError, ValueError):
+            delay_default = DEFAULT_SOURCE_KEY_DELAY
+        sources_text = data.get(CONF_CUSTOM_SOURCES_TEXT)
+        if sources_text is None:
+            try:
+                sources_text = serialize_custom_sources(
+                    normalize_custom_sources(data.get(CONF_CUSTOM_SOURCES))
+                )
+            except ValueError:
+                sources_text = ""
         return vol.Schema(
             {
                 vol.Required(CONF_HOST, default=data.get(CONF_HOST, "")): str,
@@ -237,6 +258,12 @@ class HisenseE7NOptionsFlow(config_entries.OptionsFlow):
                 **_power_on_fields(),
                 vol.Optional(CONF_MAC, default=data.get(CONF_MAC, "")): str,
                 vol.Optional(CONF_NAME, default=data.get(CONF_NAME, DEFAULT_NAME)): str,
+                vol.Optional(
+                    CONF_CUSTOM_SOURCES_TEXT, default=sources_text or ""
+                ): TextSelector(TextSelectorConfig(multiline=True)),
+                vol.Optional(
+                    CONF_SOURCE_KEY_DELAY, default=delay_default
+                ): vol.All(vol.Coerce(float), vol.Range(min=0, max=5)),
             }
         )
 
@@ -245,6 +272,12 @@ class HisenseE7NOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             merged = {**data, **user_input}
             form_errors = power_on_form_errors(merged)
+            try:
+                custom_sources = normalize_custom_sources(
+                    merged.get(CONF_CUSTOM_SOURCES_TEXT)
+                )
+            except ValueError:
+                form_errors[CONF_CUSTOM_SOURCES_TEXT] = "invalid_custom_sources"
             if form_errors:
                 return self.async_show_form(
                     step_id="init",
@@ -254,6 +287,13 @@ class HisenseE7NOptionsFlow(config_entries.OptionsFlow):
                     errors=form_errors,
                 )
             cleaned = clean_power_on_fields(merged)
+            try:
+                delay = float(
+                    cleaned.get(CONF_SOURCE_KEY_DELAY, DEFAULT_SOURCE_KEY_DELAY)
+                )
+            except (TypeError, ValueError):
+                delay = DEFAULT_SOURCE_KEY_DELAY
+            delay = max(0.0, min(5.0, delay))
             return self.async_create_entry(
                 title="",
                 data={
@@ -267,6 +307,8 @@ class HisenseE7NOptionsFlow(config_entries.OptionsFlow):
                     CONF_POWER_ON_COMMAND: cleaned.get(CONF_POWER_ON_COMMAND)
                     or DEFAULT_POWER_ON_COMMAND,
                     CONF_POWER_ON_DEVICE: cleaned.get(CONF_POWER_ON_DEVICE) or "",
+                    CONF_CUSTOM_SOURCES: custom_sources,
+                    CONF_SOURCE_KEY_DELAY: delay,
                 },
             )
 
@@ -284,6 +326,14 @@ class HisenseE7NOptionsFlow(config_entries.OptionsFlow):
             suggested.get(CONF_POWER_ON_REMOTE),
             suggested.get(CONF_MAC),
         )
+        try:
+            suggested[CONF_CUSTOM_SOURCES_TEXT] = serialize_custom_sources(
+                normalize_custom_sources(suggested.get(CONF_CUSTOM_SOURCES))
+            )
+        except ValueError:
+            suggested[CONF_CUSTOM_SOURCES_TEXT] = str(
+                suggested.get(CONF_CUSTOM_SOURCES_TEXT) or ""
+            )
         return self.async_show_form(
             step_id="init",
             data_schema=self.add_suggested_values_to_schema(schema, suggested),

@@ -79,5 +79,10 @@ def proto_power():
 
 
 @pytest.fixture(scope="session")
+def proto_custom_sources(proto_keys):
+    return load_proto("custom_sources")
+
+
+@pytest.fixture(scope="session")
 def proto_ble(proto_keys):
     return load_proto("ble_hid")

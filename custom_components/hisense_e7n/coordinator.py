@@ -16,9 +16,11 @@ from .const import (
     CONF_CONTROL_USERNAME,
     CONF_REFRESH_TOKEN,
     DEFAULT_POWER_ON_COMMAND,
+    DEFAULT_SOURCE_KEY_DELAY,
     DOMAIN,
     POWER_ON_MODE_WOL,
 )
+from .custom_sources import normalize_custom_sources
 from .power import infer_power_on_mode, normalize_power_on_entity, power_on_call
 from .tv_client import HisenseTvClient, TvState
 
@@ -51,6 +53,8 @@ class HisenseTvCoordinator(DataUpdateCoordinator[TvState]):
         self.power_on_remote: str | None = None
         self.power_on_command = DEFAULT_POWER_ON_COMMAND
         self.power_on_device = ""
+        self.custom_sources: list[dict] = []
+        self.source_key_delay = DEFAULT_SOURCE_KEY_DELAY
         self._pin_notified = False
         client.add_listener(self._on_client_state)
 
@@ -70,6 +74,24 @@ class HisenseTvCoordinator(DataUpdateCoordinator[TvState]):
         self.power_on_command = (command or "").strip() or DEFAULT_POWER_ON_COMMAND
         self.power_on_device = (device or "").strip()
         self.power_on_mode = infer_power_on_mode(mode, button, remote, mac)
+
+    def configure_custom_sources(
+        self,
+        sources: object | None,
+        *,
+        delay: float | None = None,
+    ) -> None:
+        """Store user-defined inputs and the pause between remoter keys."""
+        try:
+            self.custom_sources = normalize_custom_sources(sources)
+        except ValueError:
+            _LOGGER.warning("Ignoring invalid custom sources", exc_info=True)
+            self.custom_sources = []
+        try:
+            wait = DEFAULT_SOURCE_KEY_DELAY if delay is None else float(delay)
+        except (TypeError, ValueError):
+            wait = DEFAULT_SOURCE_KEY_DELAY
+        self.source_key_delay = max(0.0, min(5.0, wait))
 
     @property
     def can_power_on(self) -> bool:

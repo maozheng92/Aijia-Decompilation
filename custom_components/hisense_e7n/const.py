@@ -25,6 +25,10 @@ POWER_ON_MODE_WOL = "wol"
 DEFAULT_POWER_ON_COMMAND = "power"
 CONF_USE_SSL = "use_ssl"
 CONF_BLE_ADDRESS = "ble_address"
+CONF_CUSTOM_SOURCES = "custom_sources"
+CONF_CUSTOM_SOURCES_TEXT = "custom_sources_text"
+CONF_SOURCE_KEY_DELAY = "source_key_delay"
+DEFAULT_SOURCE_KEY_DELAY = 0.5
 
 AUTH_MODE_AUTO = "auto"
 AUTH_MODE_DYNAMIC = "dynamic"

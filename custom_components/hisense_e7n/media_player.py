@@ -21,6 +21,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .apps import format_app_title
 from .const import DATA_COORDINATOR, DOMAIN
 from .coordinator import HisenseTvCoordinator
+from .custom_sources import find_custom_source
 from .entity import HisenseTvEntity
 from .keys import (
     KEY_CHANNELDOWN,
@@ -113,7 +114,15 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
     @property
     def source_list(self) -> list[str] | None:
         tv = self.coordinator.data or self.coordinator.client.state
-        names = [item["name"] for item in tv.sources if item.get("name")]
+        names = [
+            str(item["name"])
+            for item in self.coordinator.custom_sources
+            if item.get("name")
+        ]
+        for item in tv.sources:
+            name = item.get("name")
+            if name and name not in names:
+                names.append(str(name))
         for app in tv.apps:
             name = app.get("name") or app.get("appName")
             if name and name not in names:
@@ -156,6 +165,13 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
         await self.coordinator.client.async_send_key(KEY_CHANNELDOWN)
 
     async def async_select_source(self, source: str) -> None:
+        custom = find_custom_source(self.coordinator.custom_sources, source)
+        if custom is not None:
+            await self.coordinator.client.async_run_key_sequence(
+                list(custom["keys"]),
+                delay=self.coordinator.source_key_delay,
+            )
+            return
         tv = self.coordinator.client.state
         for item in tv.sources:
             if item.get("name") == source:
@@ -188,4 +204,11 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
             "source_id": tv.source_id,
             "power_on_mode": self.coordinator.power_on_mode,
             "apps": [format_app_title(app) for app in tv.apps if format_app_title(app)],
+            "custom_sources": [
+                {
+                    "name": item["name"],
+                    "keys": list(item["keys"]),
+                }
+                for item in self.coordinator.custom_sources
+            ],
         }
