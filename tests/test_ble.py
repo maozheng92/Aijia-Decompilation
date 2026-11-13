@@ -163,7 +163,6 @@ def test_screenshot_bypasses_ble(proto_client, proto_credentials, monkeypatch) -
     asyncio.run(client.async_send_key("screenshot"))
     assert topics == []
     assert client.state.screenshot_note == "正在使用：聚好看"
-    assert client.state.screenshot_image == b"\xff\xd8\xff\xd9"
 
 
 def test_mqtt_disconnect_keeps_available_when_ble_up(proto_client) -> None:

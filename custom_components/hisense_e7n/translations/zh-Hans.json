@@ -85,11 +85,6 @@
         "name": "遥控器"
       }
     },
-    "image": {
-      "screenshot": {
-        "name": "截屏"
-      }
-    },
     "button": {
       "power": {"name": "电源"},
       "volume_down": {"name": "音量-"},

@@ -88,7 +88,7 @@ data:
 |---|---|
 | 电源 | `button.…_power` → `KEY_POWER`（电视离线时改走这台电视的开机方式） |
 | 音量 − / 静音 / 音量 + | `KEY_VOLUMEDOWN` / `KEY_MUTE` / `KEY_VOLUMEUP` |
-| 截屏 | `button.…_screenshot` → 电视上传当前画面，作为图像实体出现在媒体浏览器的 **Image** 里。再次截屏会更新这一张 |
+| 截屏 | `button.…_screenshot` → 电视上传当前画面，保存到媒体浏览器的 Image（Image upload）。同一台电视再次截屏会换掉上一张 |
 | 信号源 | `button.…_source` → 本机语音「信号源」，没有应答再发 `KEY_SOURCE` |
 | AI识图 | `button.…_smart_image` → 本机语音「识图」，没有应答再发 `functionSmartImage` |
 | 设置 | `KEY_CONTROL_CENTER` |
@@ -152,7 +152,7 @@ power_on_button: button.living_room_ir_tv_power
 
 ## 按键仍无反应
 
-1. 更新到 1.13.0 并重启，然后按「音量+」。方向键走 `http://<电视IP>:7778/<按键>..controller`（不行再试 7779）。信号源、AI识图走本机语音口 `7779/..pushwechatvoice`。截屏在「媒体」→「Image」里，名称是「设备名 截屏」。开关状态仍从 36669 的广播读取。
+1. 更新到 1.12.0 并重启，然后按「音量+」。方向键走 `http://<电视IP>:7778/<按键>..controller`（不行再试 7779）。信号源、AI识图走本机语音口 `7779/..pushwechatvoice`。截屏保存在媒体浏览器的 Image（Image upload）里，通知标题是「海信截屏」。开关状态仍从 36669 的广播读取。
 2. 电视需已开机，和 HA 同一局域网。
 3. 若屏幕或 HA 通知里出现 4 位数字：
 

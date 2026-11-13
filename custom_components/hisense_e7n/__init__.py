@@ -34,21 +34,11 @@ from .const import (
 from .coordinator import HisenseTvCoordinator
 from .credentials import stable_client_uuid
 from .power import normalize_power_on_entity
-from .screenshot_store import (
-    async_remove_uploaded_copy,
-    read_screenshot,
-    screenshot_path,
-)
 from .tv_client import HisenseTvClient
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [
-    Platform.MEDIA_PLAYER,
-    Platform.REMOTE,
-    Platform.BUTTON,
-    Platform.IMAGE,
-]
+PLATFORMS: list[Platform] = [Platform.MEDIA_PLAYER, Platform.REMOTE, Platform.BUTTON]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -112,13 +102,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             power_on_button or power_on_remote or data.get(CONF_MAC),
             err,
         )
-
-    stored_shot = await hass.async_add_executor_job(
-        read_screenshot, screenshot_path(hass.config.path, entry.entry_id)
-    )
-    if stored_shot:
-        client.state.screenshot_image = stored_shot
-    await async_remove_uploaded_copy(hass, entry.entry_id)
 
     coordinator = HisenseTvCoordinator(
         hass,

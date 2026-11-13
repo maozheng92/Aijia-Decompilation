@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
@@ -21,7 +20,6 @@ from .const import (
     POWER_ON_MODE_WOL,
 )
 from .power import infer_power_on_mode, normalize_power_on_entity, power_on_call
-from .screenshot_store import screenshot_path, write_screenshot
 from .tv_client import HisenseTvClient, TvState
 
 _LOGGER = logging.getLogger(__name__)
@@ -54,7 +52,6 @@ class HisenseTvCoordinator(DataUpdateCoordinator[TvState]):
         self.power_on_command = DEFAULT_POWER_ON_COMMAND
         self.power_on_device = ""
         self._pin_notified = False
-        self._screenshot_saved = client.state.screenshot_image
         client.add_listener(self._on_client_state)
 
     def configure_power_on(
@@ -116,7 +113,6 @@ class HisenseTvCoordinator(DataUpdateCoordinator[TvState]):
     @callback
     def _deliver_state(self, state: TvState) -> None:
         self.async_set_updated_data(state)
-        self._persist_new_screenshot(state)
         self._store_control_password(state)
         notification_id = f"{DOMAIN}_pair_{self.device_name}"
         if state.already_paired and not state.needs_pin:
@@ -137,19 +133,6 @@ class HisenseTvCoordinator(DataUpdateCoordinator[TvState]):
                 title="海信电视需要授权",
                 notification_id=notification_id,
             )
-
-    @callback
-    def _persist_new_screenshot(self, state: TvState) -> None:
-        image = state.screenshot_image
-        entry = self.config_entry
-        if image is None or image is self._screenshot_saved or entry is None:
-            return
-        self._screenshot_saved = image
-        path = screenshot_path(self.hass.config.path, entry.entry_id)
-        self.hass.async_create_task(self._write_screenshot(path, image))
-
-    async def _write_screenshot(self, path: Path, image: bytes) -> None:
-        await self.hass.async_add_executor_job(write_screenshot, path, image)
 
     async def _async_update_data(self) -> TvState:
         if self.client.state.available:
