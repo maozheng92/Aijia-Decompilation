@@ -69,8 +69,7 @@ class HisenseTvRemoterButton(HisenseTvEntity, ButtonEntity):
             client.remember_screenshot(media_id)
             note = client.state.screenshot_note
             message = (
-                f"截屏已保存到媒体浏览器的 Image，文件名是「{filename}」。"
-                "打开「媒体」→「Image」或「Image upload」即可看到。"
+                f"截屏已保存到媒体浏览器的 Image upload，文件名是「{filename}」。"
                 f"直接打开 /api/image/serve/{media_id}/original 。"
             )
             if note:
