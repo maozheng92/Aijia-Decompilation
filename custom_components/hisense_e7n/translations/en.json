@@ -86,6 +86,7 @@
       }
     },
     "button": {
+      "pair": {"name": "Request pairing code"},
       "power": {"name": "Power"},
       "volume_down": {"name": "Volume down"},
       "mute": {"name": "Mute"},

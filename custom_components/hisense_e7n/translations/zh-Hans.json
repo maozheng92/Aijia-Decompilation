@@ -86,6 +86,7 @@
       }
     },
     "button": {
+      "pair": {"name": "请求授权码"},
       "power": {"name": "电源"},
       "volume_down": {"name": "音量-"},
       "mute": {"name": "静音"},

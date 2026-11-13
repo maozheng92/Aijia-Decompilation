@@ -16,6 +16,7 @@ def test_key_aliases_match_aijia(proto_keys) -> None:
 def test_aijia_remoter_has_screenshot_keys(proto_keys) -> None:
     slugs = [item.slug for item in proto_keys.AIJIA_REMOTER_BUTTONS]
     assert slugs == [
+        "pair",
         "power",
         "volume_down",
         "mute",
@@ -127,6 +128,38 @@ def test_volume_type_2_is_mute(proto_client) -> None:
     assert client.state.volume == 30
     client._apply_volume({"volume_type": 0, "volume_value": 12})
     assert client.state.volume == 12
+
+
+def test_pairing_request_is_only_vidaa_app_connect(proto_client, proto_credentials) -> None:
+    client = proto_client.HisenseTvClient("127.0.0.1", uuid="12:34:56:78:9a:bc")
+    client._creds = proto_credentials.generate_dynamic_credentials(
+        "12:34:56:78:9a:bc", timestamp=1
+    )
+    published: list[tuple[str, str]] = []
+
+    class FakeMqtt:
+        def publish(self, topic, body, qos=0, retain=False):
+            published.append((topic, body))
+
+            class Info:
+                rc = proto_client.mqtt.MQTT_ERR_SUCCESS
+
+                def wait_for_publish(self, timeout=None):
+                    return None
+
+            return Info()
+
+    client._client = FakeMqtt()
+    client.start_pairing()
+    assert len(published) == 1
+    topic, body = published[0]
+    assert topic.endswith("/actions/vidaa_app_connect")
+    assert "login_each_other_info" not in topic
+    assert '"device_type":"Mobile App"' in body
+    assert client.state.pin_requested is True
+    published.clear()
+    client.submit_code("0123")
+    assert published[0][1] == '{"authNum":123}'
 
 
 def test_send_key_publishes_raw_key_only(proto_client, proto_credentials) -> None:

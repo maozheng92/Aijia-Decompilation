@@ -148,6 +148,7 @@ class TvState:
     last_error: str | None = None
     needs_pin: bool = False
     already_paired: bool = False
+    pin_requested: bool = False
     access_token: str | None = None
     refresh_token: str | None = None
 
@@ -373,30 +374,6 @@ class HisenseTvClient:
                 client.subscribe(topic, qos=0)
         self._set_loop_event(self._connected_event)
         self._notify()
-        if self._creds:
-            using_token = self._creds.mode == "access_token"
-            if not using_token and self.state.refresh_token:
-                # The stored control password expired. Ask for a new one
-                # before showing another on-screen code.
-                refresh = {"refreshtoken": self.state.refresh_token}
-                self._publish_action("platform_service", "gettoken", refresh)
-                self._publish_action("ui_service", "gettoken", refresh)
-                self._publish(
-                    f"/remoteapp/tv/platform_service/{self._creds.client_id}/data/gettoken",
-                    refresh,
-                )
-            elif not using_token:
-                # Pairing password only. vidaa_app_connect asks the TV to
-                # show the 4-digit code and then issue an access token.
-                try:
-                    self.start_pairing()
-                except Exception:  # noqa: BLE001 — state query still runs
-                    _LOGGER.debug("Pairing announce failed", exc_info=True)
-            self._publish_action("ui_service", "gettvstate", "")
-            self._publish_action("ui_service", "sourcelist", "")
-            self._publish_action("ui_service", "sourcelist", "0")
-            self._publish_action("platform_service", "getvolume", "")
-            self._publish_action("ui_service", "applist", "")
 
     def _on_disconnect(self, client: mqtt.Client, userdata: Any, *args: Any, **kwargs: Any) -> None:
         reason_code: Any = 0
@@ -579,6 +556,21 @@ class HisenseTvClient:
                     self.state.auth_mode = creds.mode
                     self.state.last_error = None
                     _LOGGER.info("MQTT connected via %s auth=%s", name, creds.mode)
+                    # Ask for the on-screen code only after the network loop
+                    # is running. Doing it inside on_connect, together with
+                    # login_each_other_info and status queries, is what kept
+                    # the code from staying on screen.
+                    if creds.mode != "access_token":
+                        try:
+                            if self.state.refresh_token:
+                                self._refresh_control_password()
+                            else:
+                                self.start_pairing()
+                        except Exception:  # noqa: BLE001
+                            _LOGGER.warning(
+                                "Could not ask the TV to show a pairing code",
+                                exc_info=True,
+                            )
                     return creds
                 last_error = f"mqtt_rc_{rc}"
                 self.state.last_error = last_error
@@ -664,7 +656,8 @@ class HisenseTvClient:
         digits = "".join(ch for ch in str(code) if ch.isdigit())
         if not digits:
             raise ValueError("empty pairing code")
-        self._publish_action("ui_service", "authenticationcode", {"authNum": digits})
+        # The TV compares this as a number. A JSON string is rejected.
+        self._publish_action("ui_service", "authenticationcode", {"authNum": int(digits)})
         self.state.needs_pin = False
 
     def capture_screenshot(self) -> None:
@@ -710,21 +703,29 @@ class HisenseTvClient:
         self._publish_action("ui_service", "gettvstate", "")
         self._publish_action("platform_service", "getvolume", "")
 
+    def _refresh_control_password(self) -> None:
+        refresh = {"refreshtoken": self.state.refresh_token}
+        self._publish_action("platform_service", "gettoken", refresh)
+        self._publish_action("ui_service", "gettoken", refresh)
+        if self._creds is not None:
+            self._publish(
+                f"/remoteapp/tv/platform_service/{self._creds.client_id}/data/gettoken",
+                refresh,
+            )
+
     def start_pairing(self) -> None:
-        """Announce this client. 爱家 / E7N Pro does not use an on-screen PIN."""
-        self._publish_action(
-            "ui_service",
-            "login_each_other_info",
-            {
-                "type": "login",
-                "tvLogin": False,
-                "tvDeviceId": "",
-                "tvCountry": "",
-                "mobileLogin": True,
-                "mobileDeviceId": self.uuid,
-            },
-        )
-        self._publish_action("ui_service", "vidaa_app_connect", CONNECT_PAYLOAD)
+        """Ask the TV, once, to show the 4-digit code.
+
+        Do not send ``login_each_other_info`` or status queries with this.
+        Those messages replace the dialog before anyone can read it.
+        Pressing this again rotates the code.
+        """
+        creds = self._require_creds()
+        topic = topics.vidaa_app_connect(creds)
+        self._publish(topic, CONNECT_PAYLOAD, wait=True)
+        _LOGGER.info("Asked the TV to show a pairing code on %s", topic)
+        self.state.pin_requested = True
+        self._notify()
 
     async def async_pair(self) -> TvState:
         """Register with the TV without waiting for a PIN."""

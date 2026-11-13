@@ -119,16 +119,16 @@ class HisenseTvCoordinator(DataUpdateCoordinator[TvState]):
             self._pin_notified = False
             persistent_notification.async_dismiss(self.hass, notification_id)
             return
-        if state.needs_pin and not self._pin_notified:
+        if (state.needs_pin or state.pin_requested) and not self._pin_notified:
             self._pin_notified = True
             persistent_notification.async_create(
                 self.hass,
                 (
-                    "电视屏幕上出现了 4 位数字。当前登录只用了配对密码，"
-                    "电视不会执行按键。在开发者工具 → 服务里调用 "
+                    "请马上看电视机画面，数字出现在画面上方或中间，大约一分钟后消失。"
+                    "看到 4 位数字后，在开发者工具里调用 "
                     f"`{DOMAIN}.submit_code`，目标选这台电视的 Remote，"
-                    "把屏幕上的数字填进 code。填对后电视会下发控制凭证，"
-                    "集成会用它重新连接。"
+                    "把数字填进 code。没有数字时，只按一次「请求授权码」按钮，"
+                    "同时盯着电视。连按会把刚出现的数字换成新的。"
                 ),
                 title="海信电视需要授权",
                 notification_id=notification_id,

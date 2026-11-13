@@ -48,6 +48,9 @@ class HisenseTvRemoterButton(HisenseTvEntity, ButtonEntity):
     async def async_press(self) -> None:
         client = self.coordinator.client
         kind = self._spec.kind
+        if kind == "pair":
+            await client.async_pair()
+            return
         if kind == "power":
             if not client.state.available:
                 await self.coordinator.async_turn_on()
