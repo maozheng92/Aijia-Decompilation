@@ -12,7 +12,6 @@ import logging
 import socket
 import ssl
 import threading
-from pathlib import Path
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -154,6 +153,7 @@ class TvState:
     access_token: str | None = None
     refresh_token: str | None = None
     screenshot_path: str | None = None
+    screenshot_media_id: str | None = None
     screenshot_note: str = ""
 
 
@@ -176,8 +176,6 @@ class HisenseTvClient:
         refresh_token: str | None = None,
         control_username: str | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
-        screenshot_dir: str | None = None,
-        screenshot_name: str = "screen.jpg",
     ) -> None:
         self.host = host
         self.port = port
@@ -205,8 +203,6 @@ class HisenseTvClient:
         self._connect_rc: int = -1
         self._lock = threading.Lock()
         self.ble: Any = None
-        self.screenshot_dir = screenshot_dir
-        self.screenshot_name = screenshot_name
 
     @property
     def creds(self) -> MqttCredentials | None:
@@ -662,20 +658,19 @@ class HisenseTvClient:
         self._publish_action("ui_service", "authenticationcode", {"authNum": int(digits)})
         self.state.needs_pin = False
 
-    def capture_screenshot(self) -> str:
-        """Download the current frame and store it under config/www."""
+    def capture_screenshot(self) -> bytes:
+        """Download the current frame. The caller stores it in the Image media source."""
         shot = capture_screen(self.host)
-        directory = self.screenshot_dir
-        if not directory:
-            raise RuntimeError("截屏目录未配置")
-        path = Path(directory) / self.screenshot_name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(shot.image)
-        self.state.screenshot_path = str(path)
         self.state.screenshot_note = shot.note
         self._notify()
-        _LOGGER.info("Saved TV screenshot to %s", path)
-        return str(path)
+        _LOGGER.info("Captured TV screenshot (%s bytes)", len(shot.image))
+        return shot.image
+
+    def remember_screenshot(self, media_id: str) -> None:
+        """Point state at the Image media-source item that holds the last frame."""
+        self.state.screenshot_media_id = media_id
+        self.state.screenshot_path = f"/api/image/serve/{media_id}/original"
+        self._notify()
 
     def open_source(self) -> None:
         """爱家 信号源: speak the command, then fall back to KEY_SOURCE."""
@@ -787,7 +782,7 @@ class HisenseTvClient:
                 _LOGGER.debug("BLE disconnect failed", exc_info=True)
         await loop.run_in_executor(None, self.disconnect_blocking)
 
-    async def async_capture_screenshot(self) -> str:
+    async def async_capture_screenshot(self) -> bytes:
         return await asyncio.get_running_loop().run_in_executor(None, self.capture_screenshot)
 
     async def async_open_source(self) -> None:

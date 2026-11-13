@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from homeassistant.components import persistent_notification
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
@@ -14,6 +12,7 @@ from .const import DATA_COORDINATOR, DOMAIN
 from .coordinator import HisenseTvCoordinator
 from .entity import HisenseTvEntity
 from .keys import AIJIA_REMOTER_BUTTONS, KEY_POWER, RemoterButton
+from .screenshot_store import async_save_screenshot
 
 
 async def async_setup_entry(
@@ -58,12 +57,21 @@ class HisenseTvRemoterButton(HisenseTvEntity, ButtonEntity):
                 await client.async_send_key(KEY_POWER)
             return
         if kind == "screenshot":
-            path = await client.async_capture_screenshot()
-            filename = Path(path).name
+            image = await client.async_capture_screenshot()
+            title = (self._entry.title or "海信").strip() or "海信"
+            filename = f"{title} 截屏.jpg".replace("/", " ").replace("\\", " ")
+            media_id = await async_save_screenshot(
+                self.hass,
+                self._entry.entry_id,
+                image,
+                filename,
+            )
+            client.remember_screenshot(media_id)
             note = client.state.screenshot_note
             message = (
-                f"截屏已保存到 config/www/hisense_e7n/{filename}。"
-                f"在浏览器打开 /local/hisense_e7n/{filename} 。"
+                f"截屏已保存到媒体浏览器的 Image，文件名是「{filename}」。"
+                "打开「媒体」→「Image」或「Image upload」即可看到。"
+                f"直接打开 /api/image/serve/{media_id}/original 。"
             )
             if note:
                 message = f"{note}\n{message}"

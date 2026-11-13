@@ -127,12 +127,10 @@ def test_send_key_falls_back_to_mqtt_when_ble_returns_false(
     assert "KEY_HOME" in payloads
 
 
-def test_screenshot_bypasses_ble(proto_client, proto_credentials, tmp_path, monkeypatch) -> None:
+def test_screenshot_bypasses_ble(proto_client, proto_credentials, monkeypatch) -> None:
     client = proto_client.HisenseTvClient(
         "127.0.0.1",
         uuid="aa:bb:cc:dd:ee:ff",
-        screenshot_dir=str(tmp_path),
-        screenshot_name="screen.jpg",
     )
     topics: list[str] = []
 
@@ -164,7 +162,7 @@ def test_screenshot_bypasses_ble(proto_client, proto_credentials, tmp_path, monk
     monkeypatch.setattr(proto_client, "capture_screen", lambda host, **kwargs: Shot())
     asyncio.run(client.async_send_key("screenshot"))
     assert topics == []
-    assert (tmp_path / "screen.jpg").read_bytes() == b"\xff\xd8\xff\xd9"
+    assert client.state.screenshot_note == "正在使用：聚好看"
 
 
 def test_mqtt_disconnect_keeps_available_when_ble_up(proto_client) -> None:
