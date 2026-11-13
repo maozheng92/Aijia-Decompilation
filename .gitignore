@@ -11,3 +11,7 @@ custom_components/hisense_e7n/certs/*.pem
 custom_components/hisense_e7n/certs/*.key
 custom_components/hisense_e7n/certs/*.p12
 custom_components/hisense_e7n/certs/*.crt
+# 2024 RemoteCA client cert. The 2018 cert inside the 爱家 APK can
+# subscribe to power state and still has its keypresses dropped.
+!custom_components/hisense_e7n/certs/vidaa_client.pem
+!custom_components/hisense_e7n/certs/vidaa_client.key

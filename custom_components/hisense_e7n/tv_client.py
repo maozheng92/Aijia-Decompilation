@@ -304,9 +304,6 @@ class HisenseTvClient:
             sources.append({"id": str(sid), "name": str(name)})
         if sources:
             self.state.sources = sources
-            # A sourcelist reply is how sehaas learns the client is authorized.
-            self.state.already_paired = True
-            self.state.needs_pin = False
 
     def _apply_apps(self, data: Any) -> None:
         items = data
@@ -384,6 +381,10 @@ class HisenseTvClient:
                 refresh = {"refreshtoken": self.state.refresh_token}
                 self._publish_action("platform_service", "gettoken", refresh)
                 self._publish_action("ui_service", "gettoken", refresh)
+                self._publish(
+                    f"/remoteapp/tv/platform_service/{self._creds.client_id}/data/gettoken",
+                    refresh,
+                )
             elif not using_token:
                 # Pairing password only. vidaa_app_connect asks the TV to
                 # show the 4-digit code and then issue an access token.
@@ -624,10 +625,8 @@ class HisenseTvClient:
     ) -> None:
         creds = self._require_creds()
         if as_key:
-            # VIDAA accepts the raw name. 爱家 sends {"key":"KEY_*"} on the
-            # same topic. Publish both once the control password is in use.
-            name = normalize_key(str(payload))
-            bodies = [name, {"key": name}]
+            # The broker runs the key only when the body is the raw name.
+            bodies = [normalize_key(str(payload))]
         else:
             bodies = [payload]
         last_error: Exception | None = None

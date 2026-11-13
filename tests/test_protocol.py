@@ -159,8 +159,7 @@ def test_send_key_publishes_raw_key_only(proto_client, proto_credentials) -> Non
     assert topics
     assert all(client._creds.client_id in topic for topic in topics)
     assert not any("aa:bb:cc:dd:ee:ff$vidaa_common" in topic for topic in topics)
-    assert "KEY_HOME" in payloads
-    assert '{"key":"KEY_HOME"}' in payloads
+    assert payloads == ["KEY_HOME"]
     assert not any(topic.endswith("/actions/vidaa_app_connect") for topic in topics)
     published.clear()
     client.send_key("screenshot")

@@ -63,6 +63,26 @@ def test_connect_falls_back_to_plain_after_tls_fail(proto_client, monkeypatch) -
     assert client.use_ssl is False
 
 
+def test_remote_ca_cert_is_tried_before_a_saved_certificate(proto_certs, tmp_path) -> None:
+    saved_cert = tmp_path / "old.pem"
+    saved_key = tmp_path / "old.key"
+    saved_cert.write_text("saved")
+    saved_key.write_text("saved")
+    pairs = proto_certs.resolve_cert_candidates(
+        tmp_path / "out",
+        str(saved_cert),
+        str(saved_key),
+        search_roots=[tmp_path],
+    )
+    assert pairs[0][0].endswith("vidaa_client.pem")
+    assert pairs[0][1].endswith("vidaa_client.key")
+    from cryptography import x509
+
+    cert = x509.load_pem_x509_certificate(Path(pairs[0][0]).read_bytes())
+    assert "VidaaAppAndroidV01" in cert.subject.rfc4514_string()
+    assert "RemoteCA" in cert.issuer.rfc4514_string()
+
+
 @pytest.mark.skipif(not APK.is_file(), reason="爱家 APK not in workspace")
 def test_extract_official_aijia_cert(proto_certs, tmp_path) -> None:
     pair = proto_certs.extract_official_cert(tmp_path, search_roots=[ROOT])

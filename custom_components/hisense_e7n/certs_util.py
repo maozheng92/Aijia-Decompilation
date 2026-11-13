@@ -33,6 +33,11 @@ P12_PASSWORDS = (
 COMPONENT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = COMPONENT_DIR.parent.parent
 AIJIA_APK_NAME = "com.hisense.ms.fly2tv.apk"
+# Signed by RemoteCA, CN=VidaaAppAndroidV01 (2024-2034). E7N Pro checks
+# this identity before it will run sendkey. The 爱家 APK only ships the
+# 2018 CN=remoteclientmobile store, which is enough to read state.
+BUNDLED_CERT = COMPONENT_DIR / "certs" / "vidaa_client.pem"
+BUNDLED_KEY = COMPONENT_DIR / "certs" / "vidaa_client.key"
 
 
 def generate_standin_cert(cert_file: Path, key_file: Path) -> None:
@@ -224,16 +229,33 @@ def extract_official_cert(
     return None
 
 
+def bundled_cert_pair() -> tuple[str, str] | None:
+    """Return the 2024 RemoteCA client cert shipped with the integration."""
+    if BUNDLED_CERT.is_file() and BUNDLED_KEY.is_file():
+        return str(BUNDLED_CERT), str(BUNDLED_KEY)
+    return None
+
+
 def resolve_cert_candidates(
     dest_dir: Path,
     user_cert: str | None = None,
     user_key: str | None = None,
     search_roots: list[Path] | None = None,
 ) -> list[tuple[str, str]]:
-    """Official 爱家 cert first, then the generated VidaaAppAndroidV01 stand-in."""
+    """2024 RemoteCA cert, then a user file, then the 2018 爱家 store.
+
+    The first TLS session that the broker accepts is the one we keep.
+    A previously saved 2018 or self-signed certificate still gets MQTT
+    rc=0, so it must not be tried before the certificate that can publish.
+    """
     pairs: list[tuple[str, str]] = []
+    bundled = bundled_cert_pair()
+    if bundled:
+        pairs.append(bundled)
     if user_cert and user_key and Path(user_cert).is_file() and Path(user_key).is_file():
-        pairs.append((user_cert, user_key))
+        user_pair = (user_cert, user_key)
+        if user_pair not in pairs:
+            pairs.append(user_pair)
     official = extract_official_cert(dest_dir, search_roots=search_roots)
     if official and official not in pairs:
         pairs.append(official)
