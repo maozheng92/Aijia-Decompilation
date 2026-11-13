@@ -4,9 +4,20 @@ from __future__ import annotations
 
 from typing import Any
 
-_NAME_KEYS = ("name", "appName", "appname", "title", "app_name")
+_NAME_KEYS = ("name", "appName", "appname", "title", "app_name", "label")
 _URL_KEYS = ("url", "appUrl", "appurl", "launchUrl")
 _ID_KEYS = ("appId", "appid", "id", "packageName", "packagename", "package")
+_PACKAGE_KEYS = ("packageName", "packagename", "package", "pkgName", "pkg")
+_SIZE_KEYS = (
+    "size",
+    "appSize",
+    "apkSize",
+    "packageSize",
+    "fileSize",
+    "installSize",
+    "occupiedSize",
+    "dataSize",
+)
 _LIST_KEYS = (
     "app_list",
     "applist",
@@ -18,6 +29,9 @@ _LIST_KEYS = (
     "myApp",
     "my_app",
     "mqttAppNameList",
+    "installedApps",
+    "installedAppList",
+    "packageList",
 )
 # 热门/推荐 are the store rows next to 我的应用, not the installed set.
 _OTHER_GROUPS = {"recommend", "hot", "store", "banner", "ad", "推荐", "热门", "应用推荐"}
@@ -29,11 +43,23 @@ def normalize_apps(data: Any) -> list[dict[str, Any]]:
     seen: set[str] = set()
     for item in _items(data):
         app = _one_app(item)
-        if app is None or app["name"] in seen:
+        if app is None:
             continue
-        seen.add(app["name"])
+        key = app.get("package") or app["name"]
+        if key in seen:
+            continue
+        seen.add(key)
         apps.append(app)
     return apps
+
+
+def format_app_title(app: dict[str, Any]) -> str:
+    """Display name like 爱家: ``健身镜 (51.45M)`` when size is known."""
+    name = str(app.get("name") or app.get("package") or "").strip()
+    size = str(app.get("size") or "").strip()
+    if name and size:
+        return f"{name} ({size})"
+    return name
 
 
 def _items(data: Any) -> list[Any]:
@@ -48,7 +74,7 @@ def _items(data: Any) -> list[Any]:
                 nested = _items(value)
                 if nested:
                     return nested
-        if any(key in data for key in (*_NAME_KEYS, *_ID_KEYS)):
+        if any(key in data for key in (*_NAME_KEYS, *_ID_KEYS, *_PACKAGE_KEYS)):
             return [data]
     return []
 
@@ -61,21 +87,31 @@ def _one_app(item: Any) -> dict[str, Any] | None:
         return _record(name, name, name, 37, 0)
     if not isinstance(item, dict) or not _installed(item):
         return None
+    package = _first(item, _PACKAGE_KEYS)
     name = _first(item, _NAME_KEYS)
     app_id = _first(item, _ID_KEYS)
-    url = _first(item, _URL_KEYS) or app_id or name
+    url = _first(item, _URL_KEYS) or package or app_id or name
     icon = _first(item, ("icon", "iconUrl", "appIcon", "thumbnail"))
+    size = _format_size(item)
+    local = _truthy(item.get("isLocalApp", item.get("islocalapp")))
+    if package and (local or not _first(item, _URL_KEYS)):
+        url = package
     if not name:
-        name = app_id or url
+        name = package or app_id or url
     if not name:
         return None
+    url_type = _as_int(item.get("urlType", item.get("urltype")), 0 if package else 37)
+    if package and local:
+        url_type = 0
     return _record(
         name,
         url,
-        app_id or url,
-        _as_int(item.get("urlType", item.get("urltype")), 37),
+        app_id or package or url,
+        url_type,
         _as_int(item.get("storeType", item.get("storetype")), 0),
         icon or None,
+        package or None,
+        size,
     )
 
 
@@ -86,6 +122,8 @@ def _record(
     url_type: int,
     store_type: int,
     icon: str | None = None,
+    package: str | None = None,
+    size: str | None = None,
 ) -> dict[str, Any]:
     app = {
         "name": name,
@@ -96,6 +134,10 @@ def _record(
     }
     if icon:
         app["icon"] = icon
+    if package:
+        app["package"] = package
+    if size:
+        app["size"] = size
     return app
 
 
@@ -125,3 +167,43 @@ def _as_int(value: Any, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _truthy(value: Any) -> bool:
+    return str(value).lower() in {"1", "true", "yes"}
+
+
+def _format_size(item: dict[str, Any]) -> str | None:
+    for key in _SIZE_KEYS:
+        if key not in item or item[key] in (None, ""):
+            continue
+        value = item[key]
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                continue
+            if text[-1:].upper() in {"B", "K", "M", "G"} or text[-2:].upper() in {
+                "KB",
+                "MB",
+                "GB",
+            }:
+                return text
+            try:
+                value = float(text)
+            except ValueError:
+                return text
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if number < 0:
+            continue
+        # Bytes when large; already-MB when small.
+        if number >= 1024 * 1024:
+            return f"{number / (1024 * 1024):.2f}M"
+        if number >= 1024:
+            return f"{number / 1024:.2f}K"
+        if number >= 100:
+            return f"{number:.2f}M"
+        return f"{number:.2f}M"
+    return None

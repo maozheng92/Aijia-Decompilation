@@ -7,6 +7,9 @@ MQTT session, so it still works when the TV never shows a pairing code.
 信号源 and 识图 are voice texts on ``/..pushwechatvoice``. 截屏 starts
 ``com.android.wechathci`` via ``/..commonstarttvapp``; the picture is then
 fetched from the TV's upload and saved by the integration.
+
+「电视打开」for an installed Android package is the same-LAN
+``/..pushsmartju`` body with ``startupType`` 4 and ``packageName``.
 """
 
 from __future__ import annotations
@@ -14,18 +17,21 @@ from __future__ import annotations
 import json
 import logging
 import random
+import re
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
 LOCAL_KEY_PORTS = (7778, 7779)
 VOICE_PORTS = (7779, 7778)
 SCREENSHOT_PORTS = (7779, 7778)
+APP_PORTS = (7779, 7778)
 IMAGE_LOOKUP = "https://qrimageurl.hismarttv.com/v5/image/imageurl/by/id"
 # Published by the official web remote as remoteMonitorCommander.
 CAPTURE_PACKAGE = "com.android.wechathci"
@@ -37,6 +43,7 @@ CAPTURE_COMMAND = {
     "packagenamesign": "bkot+cANu2aHQxujxER8Wg==",
 }
 _MAX_IMAGE = 12 * 1024 * 1024
+_PACKAGE_RE = re.compile(r"^[A-Za-z][\w]*(\.[A-Za-z][\w]*)+$")
 
 
 def send_local_key(
@@ -97,6 +104,71 @@ def push_voice(
             _LOGGER.info("TV accepted voice %s on port %s", phrase, port)
             return answered
     return answered
+
+
+def is_android_package(value: str | None) -> bool:
+    """True when ``value`` looks like an Android package name."""
+    text = (value or "").strip()
+    return bool(text) and _PACKAGE_RE.fullmatch(text) is not None
+
+
+def launch_local_app(
+    host: str,
+    package_name: str,
+    *,
+    ports: tuple[int, ...] = APP_PORTS,
+    timeout: float = 2.0,
+) -> int | None:
+    """Open an installed TV app the same way 爱家 「电视打开」 does on LAN.
+
+    Posts ``/..pushsmartju`` with ``startupType`` 4 and the package name.
+    Return the HTTP status, or None if no port answered.
+    """
+    package = package_name.strip()
+    if not is_android_package(package):
+        raise ValueError(f"invalid package: {package_name}")
+    body = {
+        "startupType": 4,
+        "startupUrl": [
+            {"key": "startupType", "value": 1, "type": "int"},
+            {"key": "intentFlags", "value": 335544352, "type": "int"},
+            {"key": "packageName", "value": package, "type": "String"},
+        ],
+    }
+    answered: int | None = None
+    for port in ports:
+        result = _exchange(f"http://{host}:{port}/..pushsmartju", body, timeout)
+        if result is None:
+            continue
+        answered = result[0]
+        if 200 <= answered < 300:
+            _LOGGER.info("TV opened %s on port %s", package, port)
+            return answered
+    return answered
+
+
+def fetch_hishare_capacity(
+    host: str,
+    *,
+    ports: tuple[int, ...] = APP_PORTS,
+    timeout: float = 2.0,
+) -> Any | None:
+    """GET ``/..hisharecapacity``. Ability flags only — not the app list."""
+    for port in ports:
+        result = _exchange(
+            f"http://{host}:{port}/..hisharecapacity", None, timeout, method="GET"
+        )
+        if result is None:
+            continue
+        status, raw = result
+        if not 200 <= status < 300 or not raw:
+            continue
+        try:
+            payload = json.loads(raw.decode("utf-8", "replace"))
+        except (UnicodeError, json.JSONDecodeError):
+            continue
+        return payload
+    return None
 
 
 def capture_screen(

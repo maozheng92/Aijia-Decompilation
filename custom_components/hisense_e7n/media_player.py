@@ -21,6 +21,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .apps import format_app_title
 from .const import DATA_COORDINATOR, DOMAIN
 from .coordinator import HisenseTvCoordinator
 from .entity import HisenseTvEntity
@@ -195,13 +196,13 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
             return _folder("Sources", "sources", children)
         children = []
         for app in tv.apps:
-            name = app.get("name")
-            url = app.get("url") or app.get("app_id") or name
-            if not name:
+            title = format_app_title(app)
+            url = app.get("package") or app.get("url") or app.get("app_id") or app.get("name")
+            if not title or not url:
                 continue
             children.append(
                 BrowseMedia(
-                    title=str(name),
+                    title=title,
                     media_class=MediaClass.APP,
                     media_content_id=f"app:{url}",
                     media_content_type=MediaType.APP,
@@ -234,13 +235,20 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
             url = media_id.split(":", 1)[1]
             for app in tv.apps:
                 app_url = app.get("url") or app.get("app_id") or ""
+                package = str(app.get("package") or "")
                 name = app.get("name") or url
-                if str(app_url) == url or str(name) == url or str(app.get("app_id") or "") == url:
+                if (
+                    str(app_url) == url
+                    or str(name) == url
+                    or package == url
+                    or str(app.get("app_id") or "") == url
+                ):
                     await self.coordinator.client.async_launch_app(
                         str(name),
                         str(app_url) if app_url else None,
                         int(app.get("url_type") or 37),
                         int(app.get("store_type") or 0),
+                        package or None,
                     )
                     return
             await self.coordinator.client.async_launch_app(url, url)
@@ -255,13 +263,15 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
                 return
         for app in tv.apps:
             name = app.get("name")
-            if name == source:
+            title = format_app_title(app)
+            if name == source or title == source:
                 url = app.get("url") or app.get("app_id")
                 await self.coordinator.client.async_launch_app(
                     str(name),
                     str(url) if url else None,
                     int(app.get("url_type") or 37),
                     int(app.get("store_type") or 0),
+                    str(app["package"]) if app.get("package") else None,
                 )
                 return
         await self.coordinator.client.async_launch_app(source)
@@ -277,7 +287,7 @@ class HisenseTvMediaPlayer(HisenseTvEntity, MediaPlayerEntity):
             "auth_mode": tv.auth_mode,
             "source_id": tv.source_id,
             "power_on_mode": self.coordinator.power_on_mode,
-            "apps": [str(app["name"]) for app in tv.apps if app.get("name")],
+            "apps": [format_app_title(app) for app in tv.apps if format_app_title(app)],
         }
 
 

@@ -37,7 +37,13 @@ from .credentials import (
     with_access_token,
 )
 from .keys import KEY_POWER, KEY_SOURCE, normalize_key
-from .local_http import capture_screen, push_voice, send_local_key
+from .local_http import (
+    capture_screen,
+    is_android_package,
+    launch_local_app,
+    push_voice,
+    send_local_key,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -201,6 +207,7 @@ class HisenseTvClient:
         self._connected_event: asyncio.Event | None = None
         self._pin_event: asyncio.Event | None = None
         self._token_event: asyncio.Event | None = None
+        self._apps_event: asyncio.Event | None = None
         self._connect_rc: int = -1
         self._lock = threading.Lock()
         self.ble: Any = None
@@ -315,6 +322,7 @@ class HisenseTvClient:
         apps = normalize_apps(data)
         if apps:
             self.state.apps = apps
+            self._set_loop_event(self._apps_event)
 
     def _handle_message(self, topic: str, payload: bytes) -> None:
         data = _loads(payload)
@@ -711,8 +719,38 @@ class HisenseTvClient:
         url: str | None = None,
         url_type: int = 37,
         store_type: int = 0,
+        package: str | None = None,
     ) -> None:
-        app_url = url or name
+        """Open an app. Prefer LAN 「电视打开」 when the target is a package."""
+        app_url = (url or package or name or "").strip()
+        pkg = (package or "").strip()
+        if not is_android_package(pkg):
+            pkg = app_url if is_android_package(app_url) else ""
+        if not pkg:
+            for app in self.state.apps:
+                if str(app.get("name") or "") == name or str(app.get("url") or "") == app_url:
+                    candidate = str(app.get("package") or app.get("url") or "")
+                    if is_android_package(candidate):
+                        pkg = candidate
+                        url_type = int(app.get("url_type") or url_type)
+                        break
+        if pkg:
+            status = launch_local_app(self.host, pkg)
+            if status is not None and 200 <= status < 300:
+                return
+            _LOGGER.info("Local 电视打开 did not take %s (status %s); trying MQTT", pkg, status)
+            payload = {
+                "name": name or pkg,
+                "url": pkg,
+                "appId": pkg,
+                "urlType": 0,
+                "storeType": int(store_type),
+                "isLocalApp": 1,
+                "has_detail_page": 0,
+                "type": 0,
+            }
+            self._publish_action("ui_service", "launchapp", payload)
+            return
         payload = {
             "name": name,
             "url": app_url,
@@ -824,13 +862,25 @@ class HisenseTvClient:
         url: str | None = None,
         url_type: int = 37,
         store_type: int = 0,
+        package: str | None = None,
     ) -> None:
         await asyncio.get_running_loop().run_in_executor(
-            None, lambda: self.launch_app(name, url, url_type, store_type)
+            None, lambda: self.launch_app(name, url, url_type, store_type, package)
         )
 
-    async def async_refresh_apps(self) -> None:
-        await asyncio.get_running_loop().run_in_executor(None, self.refresh_apps)
+    async def async_refresh_apps(self, wait: float = 3.0) -> None:
+        """Request applist and wait briefly so browse_media sees the reply."""
+        loop = asyncio.get_running_loop()
+        self._apps_event = asyncio.Event()
+        before = list(self.state.apps)
+        await loop.run_in_executor(None, self.refresh_apps)
+        if wait <= 0:
+            return
+        try:
+            await asyncio.wait_for(self._apps_event.wait(), timeout=wait)
+        except TimeoutError:
+            if self.state.apps == before:
+                _LOGGER.debug("No applist reply within %ss", wait)
 
     async def async_wait_for_broker(self) -> bool:
         """Retry MQTT after a physical power-on (button / WoL)."""

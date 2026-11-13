@@ -33,6 +33,25 @@ def test_installed_apps_skip_store_and_removed_rows() -> None:
     ]
 
 
+def test_local_package_keeps_size_and_title() -> None:
+    apps = load_proto("apps")
+    parsed = apps.normalize_apps(
+        [
+            {
+                "name": "健身镜",
+                "packageName": "com.hisense.fitness",
+                "isLocalApp": 1,
+                "appSize": 51.45 * 1024 * 1024,
+            }
+        ]
+    )
+    assert parsed[0]["package"] == "com.hisense.fitness"
+    assert parsed[0]["url"] == "com.hisense.fitness"
+    assert parsed[0]["url_type"] == 0
+    assert parsed[0]["size"] == "51.45M"
+    assert apps.format_app_title(parsed[0]) == "健身镜 (51.45M)"
+
+
 def test_name_list_and_client_apply(proto_client) -> None:
     apps = load_proto("apps")
     assert [item["name"] for item in apps.normalize_apps({"mqttAppNameList": ["聚好看", "聚好看", ""]})] == [

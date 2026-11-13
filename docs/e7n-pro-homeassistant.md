@@ -73,15 +73,17 @@ data:
   key: KEY_HOME
 ```
 
-媒体播放器里的「我的应用」是这台电视已经安装的应用，和爱家「电视应用 → 我的应用」是同一份列表。连上电视或打开这个目录时，会向电视请求 `applist`。
+媒体播放器里的「我的应用」对应爱家「电视应用 → 我的应用」。打开目录时会向电视请求 MQTT `applist`，并等待几秒再展示。点选一项时优先走本机「电视打开」：`POST http://电视IP:7779/..pushsmartju`（`startupType` 4 + `packageName`），MQTT `launchapp` 只作回退。
+
+爱家里带安装体积（如 `51.45M`）的那份列表来自「电视应用」H5（功能码 `16005007` / `dsyy`，布局里的 `formalWebUrl` + `deviceIp`）。手机 APK 里没有这份列表接口；云端 layout 又要账号签名。所以当前能稳定复现的是：有 MQTT `applist` 时填目录，有 Android 包名时用本机打开。
 
 ```yaml
 service: hisense_e7n.launch_app
 target:
   entity_id: media_player.hisense_e7n_pro
 data:
-  name: Netflix
-  url: netflix
+  name: 云视听极光
+  url: com.ktcp.video
 ```
 
 爱家遥控页对应关系：

@@ -150,3 +150,45 @@ def test_send_key_stops_after_http_accepts(proto_client, proto_credentials, monk
     monkeypatch.setattr(proto_client, "send_local_key", lambda host, key, **kwargs: 200)
     client.send_key("home")
     assert published == []
+
+
+def test_launch_local_app_posts_pushsmartju(proto_local_http, monkeypatch) -> None:
+    seen: list[tuple[str, bytes | None]] = []
+
+    def fake_urlopen(request, timeout=0):
+        del timeout
+        seen.append((request.full_url, request.data))
+        if request.full_url.endswith(":7779/..pushsmartju"):
+            return _Response(200)
+        raise urllib.error.URLError("refused")
+
+    monkeypatch.setattr(proto_local_http.urllib.request, "urlopen", fake_urlopen)
+    status = proto_local_http.launch_local_app("192.0.2.10", "com.ktcp.video", timeout=0.1)
+    assert status == 200
+    assert seen[0][0] == "http://192.0.2.10:7779/..pushsmartju"
+    assert b'"packageName"' in seen[0][1]
+    assert b"com.ktcp.video" in seen[0][1]
+    assert proto_local_http.is_android_package("com.ktcp.video")
+    assert not proto_local_http.is_android_package("netflix")
+
+
+def test_launch_app_prefers_local_package(proto_client, monkeypatch) -> None:
+    published: list[str] = []
+    client = proto_client.HisenseTvClient("192.0.2.10", uuid="aa:bb:cc:dd:ee:ff")
+
+    class FakeMqtt:
+        def publish(self, topic, payload=None, qos=0, retain=False):
+            published.append(topic)
+
+            class Info:
+                rc = proto_client.mqtt.MQTT_ERR_SUCCESS
+
+                def wait_for_publish(self, timeout=None):
+                    return None
+
+            return Info()
+
+    client._client = FakeMqtt()
+    monkeypatch.setattr(proto_client, "launch_local_app", lambda host, package, **kwargs: 200)
+    client.launch_app("云视听极光", "com.ktcp.video")
+    assert published == []
