@@ -98,7 +98,6 @@ class RemoterButton:
 # 电源 / 音量- 静音 音量+ / 截屏 / 信号源 / AI识图 / 设置 / 方向键 OK / 返回 首页 菜单
 # 「切换遥控模式」和底部语音是 App 内能力，不作为电视按键。
 AIJIA_REMOTER_BUTTONS: tuple[RemoterButton, ...] = (
-    RemoterButton("pair", "pair", "mdi:numeric", "pair"),
     RemoterButton("power", "power", "mdi:power", "power", KEY_POWER),
     RemoterButton("volume_down", "volume_down", "mdi:minus", "key", KEY_VOLUMEDOWN),
     RemoterButton("mute", "mute", "mdi:volume-mute", "key", KEY_MUTE),

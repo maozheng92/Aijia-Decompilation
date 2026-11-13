@@ -36,6 +36,7 @@ from .credentials import (
     with_access_token,
 )
 from .keys import KEY_POWER, KEY_SOURCE, normalize_key
+from .local_http import send_local_key
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -560,17 +561,11 @@ class HisenseTvClient:
                     # is running. Doing it inside on_connect, together with
                     # login_each_other_info and status queries, is what kept
                     # the code from staying on screen.
-                    if creds.mode != "access_token":
+                    if creds.mode != "access_token" and self.state.refresh_token:
                         try:
-                            if self.state.refresh_token:
-                                self._refresh_control_password()
-                            else:
-                                self.start_pairing()
+                            self._refresh_control_password()
                         except Exception:  # noqa: BLE001
-                            _LOGGER.warning(
-                                "Could not ask the TV to show a pairing code",
-                                exc_info=True,
-                            )
+                            _LOGGER.debug("Token refresh failed", exc_info=True)
                     return creds
                 last_error = f"mqtt_rc_{rc}"
                 self.state.last_error = last_error
@@ -644,11 +639,11 @@ class HisenseTvClient:
         if kind in {"source", "signal"}:
             self.open_source()
             return
-        _LOGGER.info(
-            "sendkey %s as %s",
-            normalize_key(key),
-            self._creds.client_id if self._creds else "",
-        )
+        name = normalize_key(key)
+        status = send_local_key(self.host, name)
+        if status is not None and 200 <= status < 300:
+            return
+        _LOGGER.info("HTTP remote did not take %s (status %s); trying MQTT", name, status)
         self._publish_action("remote_service", "sendkey", key, as_key=True)
 
     def submit_code(self, code: str) -> None:
@@ -666,7 +661,8 @@ class HisenseTvClient:
             self._publish_action("ui_service", action, "")
 
     def open_source(self) -> None:
-        """爱家 信号源: refresh sourcelist and send the VIDAA source key."""
+        """爱家 信号源: the local HTTP key, then the MQTT source list."""
+        send_local_key(self.host, KEY_SOURCE)
         self._publish_action("ui_service", "sourcelist", "")
         self._publish_action("remote_service", "sendkey", KEY_SOURCE, as_key=True)
 

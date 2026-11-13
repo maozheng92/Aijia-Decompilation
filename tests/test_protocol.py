@@ -16,7 +16,6 @@ def test_key_aliases_match_aijia(proto_keys) -> None:
 def test_aijia_remoter_has_screenshot_keys(proto_keys) -> None:
     slugs = [item.slug for item in proto_keys.AIJIA_REMOTER_BUTTONS]
     assert slugs == [
-        "pair",
         "power",
         "volume_down",
         "mute",

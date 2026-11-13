@@ -227,7 +227,7 @@ startDiscoverDlnaTv
 
 E7N Pro 是 VIDAA 机。爱家添加家电会提示打开蓝牙（`flutter_blue_plus`），那不是电视遥控，电视菜单里也通常没有蓝牙 MAC。
 
-按键走机内 MQTT `:36669`。配对密码只能连上；屏幕上的 4 位数字通过 `hisense_e7n.submit_code` 送回后，电视下发 access token，要用这个 token 当密码重连，按键才会执行。客户端 id 是 `{uuid}$his$…_vidaacommon_001`，不是 `HomeAssistant`，也不是电视 Wi‑Fi MAC。QoS 必须是 0。实现见 `custom_components/hisense_e7n` 与 [e7n-pro-homeassistant.md](e7n-pro-homeassistant.md)。
+按键不走 36669，也不要授权码。爱家在电视上探测 `7778` / `7779`，按键是 `POST http://<电视IP>:<端口>/<KEY>..controller`，正文 `{}`。36669 只用来订开关状态。实现见 `custom_components/hisense_e7n` 与 [e7n-pro-homeassistant.md](e7n-pro-homeassistant.md)。
 
 **开机例外：** 爱家无法唤醒已完全关机的电视（机内 MQTT 不在线，`KEY_POWER` 发不出去）。每台电视在集成里单独选择开机方式：HA 的 button / 开关 / 脚本，或一只红外 `remote` 的 `remote.send_command`，或 Wi-Fi MAC 网络唤醒。
 
