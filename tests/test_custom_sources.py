@@ -55,6 +55,25 @@ def test_slug_is_stable(proto_custom_sources) -> None:
     assert "hdmi1" in first
 
 
+def test_format_and_summarize_sequences(proto_custom_sources) -> None:
+    assert (
+        proto_custom_sources.format_key_sequence(
+            ["KEY_SOURCE", "KEY_RIGHT", "KEY_OK"]
+        )
+        == "source → right → ok"
+    )
+    summary = proto_custom_sources.summarize_custom_sources(
+        [
+            {"name": "HDMI1", "keys": ["KEY_SOURCE", "KEY_RIGHT", "KEY_OK"]},
+            {"name": "HDMI2", "keys": ["KEY_SOURCE", "KEY_RIGHT", "KEY_RIGHT", "KEY_OK"]},
+        ]
+    )
+    assert "HDMI1: source → right → ok" in summary
+    assert "HDMI2: source → right → right → ok" in summary
+    assert "KEY_SOURCE" in proto_custom_sources.SEQUENCE_BUTTON_KEYS
+    assert "KEY_RIGHT" in proto_custom_sources.SEQUENCE_BUTTON_KEYS
+
+
 def test_run_key_sequence_pauses_between_keys(proto_client) -> None:
     client = proto_client.HisenseTvClient("127.0.0.1", uuid="aa:bb:cc:dd:ee:ff")
     sent: list[str] = []

@@ -1,9 +1,7 @@
 """User-defined TV inputs switched by a remoter key sequence.
 
-Example (options text)::
-
-    HDMI1: KEY_SOURCE, KEY_RIGHT, KEY_OK
-    HDMI2: source, right, right, ok
+Options UI: name a source, then pick remoter buttons one by one
+(e.g. source → right → ok). Text macros remain supported for import.
 """
 
 from __future__ import annotations
@@ -12,10 +10,69 @@ import hashlib
 import re
 from typing import Any
 
-from .keys import normalize_key
+from .keys import (
+    KEY_CONTROL_CENTER,
+    KEY_DOWN,
+    KEY_HOME,
+    KEY_LEFT,
+    KEY_MENU,
+    KEY_OK,
+    KEY_RETURNS,
+    KEY_RIGHT,
+    KEY_SOURCE,
+    KEY_UP,
+    normalize_key,
+)
+
+# Remoter buttons offered when composing a custom input sequence.
+# Same key may be picked more than once (e.g. RIGHT, RIGHT).
+SEQUENCE_BUTTON_KEYS: tuple[str, ...] = (
+    KEY_SOURCE,
+    KEY_UP,
+    KEY_DOWN,
+    KEY_LEFT,
+    KEY_RIGHT,
+    KEY_OK,
+    KEY_RETURNS,
+    KEY_HOME,
+    KEY_MENU,
+    KEY_CONTROL_CENTER,
+)
+
+_KEY_LABELS = {
+    KEY_SOURCE: "source",
+    KEY_UP: "up",
+    KEY_DOWN: "down",
+    KEY_LEFT: "left",
+    KEY_RIGHT: "right",
+    KEY_OK: "ok",
+    KEY_RETURNS: "back",
+    KEY_HOME: "home",
+    KEY_MENU: "menu",
+    KEY_CONTROL_CENTER: "settings",
+}
 
 _NAME_SPLIT = re.compile(r"\s*[:：|＝=]\s*", re.UNICODE)
 _KEY_SPLIT = re.compile(r"[\s,，、+/|]+")
+
+
+def format_key_sequence(keys: list[str] | None) -> str:
+    """Human-readable sequence for options descriptions."""
+    if not keys:
+        return ""
+    return " → ".join(_KEY_LABELS.get(key, key) for key in keys)
+
+
+def summarize_custom_sources(sources: list[dict[str, Any]] | None) -> str:
+    """One line per source for the manage-sources description."""
+    lines: list[str] = []
+    for item in sources or []:
+        name = str(item.get("name") or "").strip()
+        if not name:
+            continue
+        sequence = format_key_sequence(list(item.get("keys") or []))
+        lines.append(f"{name}: {sequence}" if sequence else name)
+    return "\n".join(lines) if lines else ""
 
 
 def parse_custom_sources_text(text: str | None) -> list[dict[str, Any]]:

@@ -48,6 +48,13 @@
     "step": {
       "init": {
         "title": "Hisense E7N Pro options",
+        "menu_options": {
+          "basic": "Connection and power on",
+          "custom_sources": "Custom inputs"
+        }
+      },
+      "basic": {
+        "title": "Connection and power on",
         "data": {
           "host": "TV IP address",
           "port": "MQTT port",
@@ -58,7 +65,6 @@
           "power_on_device": "IR device name",
           "mac": "TV Wi-Fi MAC",
           "name": "Name",
-          "custom_sources_text": "Custom inputs",
           "source_key_delay": "Pause between keys (seconds)"
         },
         "data_description": {
@@ -68,15 +74,45 @@
           "power_on_command": "IR command name, for example power.",
           "power_on_device": "Optional Harmony device name.",
           "mac": "Wi-Fi MAC for Wake-on-LAN. Required when the mode is Wake-on-LAN.",
-          "custom_sources_text": "One input per line: Name: KEY_SOURCE, KEY_RIGHT, KEY_OK. Aliases such as source, right, ok also work. Each line becomes a media_player source and a button.",
           "source_key_delay": "Wait this long between remoter keys in a custom input sequence. Default 0.5."
+        }
+      },
+      "custom_sources": {
+        "title": "Custom inputs",
+        "description": "Current inputs:\n{sources}\n\nAdd a name first, then pick remoter buttons in order (source → right → ok). Each input becomes a media_player source and a button.",
+        "data": {
+          "manage_action": "Action",
+          "manage_source": "Input"
+        },
+        "data_description": {
+          "manage_action": "Add a new input, edit/remove an existing one, or finish and save.",
+          "manage_source": "Required when editing or removing."
+        }
+      },
+      "source_name": {
+        "title": "Input name",
+        "description": "Name this input (for example HDMI1). Next you will pick the remoter buttons used to switch to it.",
+        "data": {
+          "custom_source_name": "Name"
+        }
+      },
+      "source_buttons": {
+        "title": "Pick remoter buttons",
+        "description": "Input: {source_name}\nSequence: {sequence}\n\nChoose a remoter button, then Add. Repeat (the same button can be added more than once). Choose Done when the sequence is complete.",
+        "data": {
+          "sequence_button": "Remoter button",
+          "sequence_action": "Action"
         }
       }
     },
     "error": {
       "cannot_connect_ble": "Invalid or unreachable TV Bluetooth address. Enable Bluetooth on the Home Assistant host and retry.",
       "power_on_required": "This power-on method needs the matching entity, IR command, or Wi-Fi MAC.",
-      "invalid_custom_sources": "Each line must be Name: key, key, … with at least one remoter key."
+      "source_required": "Pick which input to edit or remove.",
+      "source_name_required": "Enter a name for this input.",
+      "source_name_duplicate": "That input name is already used.",
+      "sequence_button_required": "Pick a remoter button to add.",
+      "sequence_empty": "Add at least one remoter button before finishing."
     }
   },
   "entity": {
@@ -115,6 +151,36 @@
         "button": "Button, switch, or script",
         "remote": "Infrared remote",
         "wol": "Wake-on-LAN"
+      }
+    },
+    "manage_action": {
+      "options": {
+        "add": "Add input",
+        "edit": "Edit input",
+        "remove": "Remove input",
+        "finish": "Save and finish"
+      }
+    },
+    "sequence_action": {
+      "options": {
+        "add": "Add button to sequence",
+        "undo": "Remove last button",
+        "clear": "Clear sequence",
+        "done": "Done"
+      }
+    },
+    "sequence_button": {
+      "options": {
+        "KEY_SOURCE": "Source",
+        "KEY_UP": "Up",
+        "KEY_DOWN": "Down",
+        "KEY_LEFT": "Left",
+        "KEY_RIGHT": "Right",
+        "KEY_OK": "OK",
+        "KEY_RETURNS": "Back",
+        "KEY_HOME": "Home",
+        "KEY_MENU": "Menu",
+        "KEY_CONTROL_CENTER": "Settings"
       }
     }
   }
