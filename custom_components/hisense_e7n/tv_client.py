@@ -25,6 +25,7 @@ from .certs_util import build_ssl_context
 from .const import (
     DEFAULT_PORT,
     DEFAULT_SOURCE_KEY_DELAY,
+    SOURCE_MENU_EXTRA_DELAY,
     MQTT_CONNACK_WAIT,
     MQTT_CONNECT_TIMEOUT,
     MQTT_KEEPALIVE,
@@ -697,14 +698,19 @@ class HisenseTvClient:
         delay: float = DEFAULT_SOURCE_KEY_DELAY,
         pause: Callable[[float], None] = time.sleep,
     ) -> None:
-        """Send remoter keys in order, with a short pause between them.
+        """Send remoter keys in order, with a pause between them.
 
         Used for custom inputs such as ``KEY_SOURCE → KEY_RIGHT → KEY_OK``.
+        After ``KEY_SOURCE`` wait a little longer so the source menu can open.
         """
         wait = max(0.0, float(delay))
         for index, key in enumerate(keys):
-            if index and wait:
-                pause(wait)
+            if index:
+                gap = wait
+                if keys[index - 1] == KEY_SOURCE:
+                    gap += max(0.0, float(SOURCE_MENU_EXTRA_DELAY))
+                if gap:
+                    pause(gap)
             self.send_key(key)
 
     def push_smart_image(self) -> None:

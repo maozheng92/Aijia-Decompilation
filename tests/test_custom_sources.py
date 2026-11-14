@@ -74,7 +74,7 @@ def test_format_and_summarize_sequences(proto_custom_sources) -> None:
     assert "KEY_RIGHT" in proto_custom_sources.SEQUENCE_BUTTON_KEYS
 
 
-def test_run_key_sequence_pauses_between_keys(proto_client) -> None:
+def test_run_key_sequence_pauses_between_keys(proto_client, proto_const) -> None:
     client = proto_client.HisenseTvClient("127.0.0.1", uuid="aa:bb:cc:dd:ee:ff")
     sent: list[str] = []
     waits: list[float] = []
@@ -92,4 +92,10 @@ def test_run_key_sequence_pauses_between_keys(proto_client) -> None:
         pause=fake_pause,
     )
     assert sent == ["KEY_SOURCE", "KEY_RIGHT", "KEY_OK"]
-    assert waits == [0.4, 0.4]
+    extra = proto_const.SOURCE_MENU_EXTRA_DELAY
+    assert waits == [0.4 + extra, 0.4]
+
+
+def test_legacy_half_second_delay_is_upgraded(proto_const) -> None:
+    assert proto_const.DEFAULT_SOURCE_KEY_DELAY == 1.5
+    assert proto_const.LEGACY_SOURCE_KEY_DELAY == 0.5

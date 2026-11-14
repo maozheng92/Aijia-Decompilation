@@ -28,7 +28,10 @@ CONF_BLE_ADDRESS = "ble_address"
 CONF_CUSTOM_SOURCES = "custom_sources"
 CONF_CUSTOM_SOURCES_TEXT = "custom_sources_text"
 CONF_SOURCE_KEY_DELAY = "source_key_delay"
-DEFAULT_SOURCE_KEY_DELAY = 0.5
+# Source overlays on VIDAA need ~1–2s; 0.5 was too fast for SOURCE→RIGHT→OK.
+DEFAULT_SOURCE_KEY_DELAY = 1.5
+LEGACY_SOURCE_KEY_DELAY = 0.5
+SOURCE_MENU_EXTRA_DELAY = 0.5
 CONF_CUSTOM_SOURCE_NAME = "custom_source_name"
 CONF_SEQUENCE_BUTTON = "sequence_button"
 CONF_SEQUENCE_ACTION = "sequence_action"

@@ -74,7 +74,7 @@
           "power_on_command": "红外指令名，例如 power。",
           "power_on_device": "可选，Harmony 的设备名。",
           "mac": "开机方式为网络唤醒时必填。其他方式可以留空。",
-          "source_key_delay": "自定义输入源按键组合之间的等待时间，默认 0.5 秒。"
+          "source_key_delay": "自定义输入源按键组合之间的等待时间，默认 1.5 秒。按「信号源」后还会再多等 0.5 秒，方便菜单打开。"
         }
       },
       "custom_sources": {
