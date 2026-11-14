@@ -25,7 +25,6 @@ from .certs_util import build_ssl_context
 from .const import (
     DEFAULT_PORT,
     DEFAULT_SOURCE_KEY_DELAY,
-    SOURCE_MENU_EXTRA_DELAY,
     MQTT_CONNACK_WAIT,
     MQTT_CONNECT_TIMEOUT,
     MQTT_KEEPALIVE,
@@ -646,10 +645,15 @@ class HisenseTvClient:
         if kind in {"smart_image", "smartimage", "ai"}:
             self.push_smart_image()
             return
-        if kind in {"source", "signal"}:
+        # Custom-source macros store KEY_SOURCE; the remoter button uses "source".
+        # Both must open the source menu the same way (voice → local → MQTT).
+        if kind in {"source", "signal", "key_source"}:
             self.open_source()
             return
         name = normalize_key(key)
+        if name == KEY_SOURCE:
+            self.open_source()
+            return
         status = send_local_key(self.host, name)
         if status is not None and 200 <= status < 300:
             return
@@ -698,19 +702,15 @@ class HisenseTvClient:
         delay: float = DEFAULT_SOURCE_KEY_DELAY,
         pause: Callable[[float], None] = time.sleep,
     ) -> None:
-        """Send remoter keys in order, with a pause between them.
+        """Send remoter keys in order, with a short pause between them.
 
         Used for custom inputs such as ``KEY_SOURCE → KEY_RIGHT → KEY_OK``.
-        After ``KEY_SOURCE`` wait a little longer so the source menu can open.
+        ``KEY_SOURCE`` goes through ``open_source`` via ``send_key``.
         """
         wait = max(0.0, float(delay))
         for index, key in enumerate(keys):
-            if index:
-                gap = wait
-                if keys[index - 1] == KEY_SOURCE:
-                    gap += max(0.0, float(SOURCE_MENU_EXTRA_DELAY))
-                if gap:
-                    pause(gap)
+            if index and wait:
+                pause(wait)
             self.send_key(key)
 
     def push_smart_image(self) -> None:

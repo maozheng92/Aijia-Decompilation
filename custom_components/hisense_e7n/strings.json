@@ -74,7 +74,7 @@
           "power_on_command": "IR command name, for example power.",
           "power_on_device": "Optional Harmony device name.",
           "mac": "Wi-Fi MAC for Wake-on-LAN. Required when the mode is Wake-on-LAN.",
-          "source_key_delay": "Wait this long between remoter keys in a custom input sequence. Default 1.5. After Source an extra 0.5s is added so the menu can open."
+          "source_key_delay": "Wait this long between remoter keys in a custom input sequence. Default 0.5."
         }
       },
       "custom_sources": {
